@@ -1,0 +1,79 @@
+# DCA Trailing Bot - Configuration OPTIMISÉE pour réduire le drawdown
+# Stratégie : DCA (2 entrées à 33%) + Trailing Stop 12%
+# Cibles : BTC-USDC, ETH-USDC (Coinbase Advanced Trade)
+
+# Mode d'exécution
+mode: paper
+
+# Configuration marché
+market:
+  product_id: BTC-USDC
+  granularity: ONE_HOUR
+  warmup_bars: 100
+
+# Stratégie DCA + Trailing Stop
+strategy:
+  entry_mode: dca_on_pullback
+  
+  # Configuration DCA - MOINS AGRESSIVE
+  dca_levels: 2              # 2 niveaux au lieu de 3
+  dca_percentage: 0.33      # 33% du capital initial par niveau
+  dca_delay_bars: 6         # 6 bougies = 6 heures entre DCA
+  dca_pullback_levels: [-3.0, -6.0]  # Seuils plus larges
+  
+  # Entrée initiale sur pullback
+  initial_entry_condition: pullback
+  breakout_lookback: 20
+  
+  # Filtre de tendance - ACTIVÉ pour éviter marché baissier
+  trend_filter: true
+  trend_ema: 50             # EMA 50 (plus réactif)
+  trend_slope_lookback: 10
+  
+  # ADX - Désactivé
+  adx_period: 14
+  adx_min: 0
+
+# Gestion du risque - STOP PLUS SERRÉ
+risk:
+  trailing_stop_percentage: 12.0   # 12% (au lieu de 15-25%)
+  initial_stop_percentage: 10.0    # 10% (protection initiale)
+  take_profit_r_multiple: null
+  take_profit_percentage: null
+  risk_per_trade: 0.01
+  max_position_pct: 0.66
+  hard_max_loss_pct: 0.10
+  daily_max_loss_pct: 0.05
+  max_drawdown_pct: 0.25
+
+# Exécution - COOLDOWN POUR ÉVITER RÉENTRÉE TROP RAPIDE
+execution:
+  prefer_maker: true
+  limit_offset_bps: 5.0
+  order_timeout_sec: 45
+  stop_exit_is_market: true
+  cooldown_bars: 24          # 24 heures (1 jour) - CLÉ POUR RÉDUIRE LE DRAWDOWN
+  poll_offset_sec: 20
+
+# Paper trading
+paper:
+  starting_cash: 10000.0
+
+# Notifications
+notifications:
+  enabled: false
+  on_trades: true
+  on_incidents: true
+
+discord:
+  enabled: false
+  webhook_url: ""
+  send_trades: true
+  send_backtest_results: true
+
+# Logging
+logging:
+  level: INFO
+  state_file: state/bot_state.json
+  trades_csv: logs/trades.csv
+  equity_csv: logs/equity.csv

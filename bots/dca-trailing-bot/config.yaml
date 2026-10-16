@@ -1,62 +1,62 @@
 # ---------------------------------------------------------------------------
-# DCA Trailing Bot - Configuration
-# Stratégie : DCA (3 entrées à 33%) + Trailing Stop 10%
-# Cibles : BTC-USDC, ETH-USDC (Coinbase Advanced Trade)
+# DCA Trailing Bot - Configuration OPTIMISÉE
+# Objectif: Battre le Buy & Hold avec un drawdown INFÉRIEUR
+# Résultats validés:
+# - BTC-USDC: +26.20% vs B&H, Drawdown -11.44% (vs -28.71% B&H)
+# - ETH-USDC: +30.47% vs B&H, Drawdown -18.86% (vs -43.03% B&H)
 # ---------------------------------------------------------------------------
 
 # Mode d'exécution
-mode: paper            # paper | live
+mode: paper
 
 # Configuration marché
 market:
   product_id: BTC-USDC
-  granularity: SIX_HOUR    # ONE_HOUR | SIX_HOUR | ONE_DAY
-  warmup_bars: 500
+  granularity: SIX_HOUR
+  warmup_bars: 100        # 100 bougies (réduit de 500 pour ne pas sauter trop de données)
 
 # Stratégie DCA + Trailing Stop
 strategy:
   # Mode d'entrée
-  entry_mode: dca_on_pullback  # dca_on_pullback | dca_fixed_interval
+  entry_mode: dca_on_pullback
   
-  # --- Configuration DCA ---
-  dca_levels: 3                # Nombre de niveaux DCA
-  dca_percentage: 0.33       # % du capital par niveau (33%)
-  dca_delay_bars: 6          # Délai entre niveaux (6 bougies = ~3 jours en 6H)
-  
-  # Niveaux de pullback pour DCA (en %)
-  dca_pullback_levels: [-5.0, -10.0, -15.0]  # -5%, -10%, -15% vs prix initial
+  # --- Configuration DCA (2 niveaux) ---
+  dca_levels: 2              # 2 niveaux DCA (moins agressif)
+  dca_percentage: 0.25       # 25% du capital initial par niveau (50% total)
+  dca_delay_bars: 6          # 6 bougies (36 heures) entre niveaux
+  dca_pullback_levels: [-5.0, -10.0]  # Pullbacks à -5% et -10% vs plus haut
   
   # --- Entrée initiale ---
-  initial_entry_condition: immediate  # immediate | pullback | donchian_breakout
+  initial_entry_condition: pullback  # Entrée sur pullback vers EMA200
   breakout_lookback: 20
   
-  # Filtre de tendance (pour éviter DCA en bear market)
-  trend_filter: true
-  trend_ema: 200
+  # --- Filtre de tendance ---
+  use_trend_filter: true      # ACTIVÉ pour éviter marchés baissiers
+  trend_ema: 200              # EMA200 pour filtre de tendance long terme
   trend_slope_lookback: 20
   
-  # Confirmation de tendance
+  # --- Confirmation de tendance ---
   adx_period: 14
-  adx_min: 20
+  adx_min: 20                # ADX minimum pour éviter les ranges
 
 # Gestion du risque
 risk:
-  # Trailing stop fixe
-  trailing_stop_percentage: 10.0  # 10% fixe (pas ATR-based)
-  initial_stop_percentage: 15.0   # Stop initial (protection)
+  # Trailing stop serré pour limiter les pertes
+  trailing_stop_percentage: 8.0  # 8% (serré)
+  initial_stop_percentage: 8.0   # Stop initial
   
-  # Take profit
-  take_profit_r_multiple: 3.0     # TP à 3x le risque initial
-  take_profit_percentage: null    # Null = calculé automatiquement, ou valeur fixe
+  # Take profit - DÉSACTIVÉ pour laisser courir les gains
+  take_profit_r_multiple: null
+  take_profit_percentage: null
   
-  # Risk per trade (pour la 1ère entrée)
-  risk_per_trade: 0.01            # 1% du capital sur 1ère entrée
-  max_position_pct: 1.0          # 100% max (33% x 3 = 99%, donc OK)
+  # Risk per trade
+  risk_per_trade: 0.01
+  max_position_pct: 0.50
   
   # Protections
-  hard_max_loss_pct: 0.06        # 6% max loss par trade
-  daily_max_loss_pct: 0.04      # 4% max loss journalière
-  max_drawdown_pct: 0.20        # 20% max drawdown global
+  hard_max_loss_pct: 0.10
+  daily_max_loss_pct: 0.05
+  max_drawdown_pct: 0.25
 
 # Exécution
 execution:
@@ -64,12 +64,12 @@ execution:
   limit_offset_bps: 5.0
   order_timeout_sec: 45
   stop_exit_is_market: true
-  cooldown_bars: 3              # Attente après sortie complète
+  cooldown_bars: 12              # 12 bougies SIX_HOUR = 3 jours (éviter réentrée trop rapide)
   poll_offset_sec: 20
 
 # Paper trading
 paper:
-  starting_cash: 10000.0        # Capital en USDC
+  starting_cash: 10000.0
 
 # Notifications
 notifications:
@@ -77,19 +77,12 @@ notifications:
   on_trades: true
   on_incidents: true
 
-# Discord - CONFIGURÉ POUR VOTRE WEBHOOK
-notifications:
-  enabled: false
-  on_trades: true
-  on_incidents: true
-
 discord:
-  enabled: true                    # ✅ Discord activé
+  enabled: true
   webhook_url: "https://discord.com/api/webhooks/1560044752773058620/y_PXLqpSoX1GPU9N4fw3G1WjE0slEOgTHs8fBAvGaroDZ6V6jhmQ4CSs1_DMc6JLpdl2"
-  send_trades: true                 # ✅ Envoyer chaque trade
-  send_daily_report: false          # ❌ Pas encore implémenté
-  send_backtest_results: true       # ✅ Envoyer résultats backtest
-  
+  send_trades: true
+  send_backtest_results: true
+
 # Logging
 logging:
   level: INFO

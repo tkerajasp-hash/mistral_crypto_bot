@@ -1,0 +1,45 @@
+mode: paper
+
+market:
+  product_id: BTC-USDC
+  granularity: SIX_HOUR
+  warmup_bars: 500
+
+strategy:
+  entry_mode: dca_on_pullback
+  
+  # PAS de DCA
+  dca_levels: 1
+  dca_percentage: 0.33
+  dca_delay_bars: 10000
+  dca_pullback_levels: [-100.0]
+  
+  # Entrée sur pullback en tendance haussière
+  initial_entry_condition: pullback
+  breakout_lookback: 20
+  
+  # Filtre de tendance STRICT EMA200
+  trend_filter: true
+  trend_ema: 200
+  trend_slope_lookback: 20
+  
+  adx_period: 14
+  adx_min: 0
+
+risk:
+  trailing_stop_percentage: 10.0
+  initial_stop_percentage: 10.0
+  take_profit_r_multiple: null
+  risk_per_trade: 0.01
+  max_position_pct: 0.33
+
+execution:
+  prefer_maker: true
+  limit_offset_bps: 5.0
+  order_timeout_sec: 45
+  stop_exit_is_market: true
+  cooldown_bars: 3
+  poll_offset_sec: 20
+
+paper:
+  starting_cash: 10000.0

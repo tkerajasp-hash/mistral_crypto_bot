@@ -277,8 +277,8 @@ class DCABacktester:
                     )
                     trades.append(trade)
                     
-                    # Mettre à jour le cash
-                    cash = position.total_cost + position.entry_fees + pnl + exit_fee
+                    # Mettre à jour le cash : cash précédent + proceeds + pnl
+                    cash = cash + proceeds + pnl
                     
                     # Réinitialiser
                     position = None
@@ -440,36 +440,43 @@ class DCABacktester:
                 f"STOP LOSS @ {effective_stop:.2f} (trailing: {trailing_stop:.2f}, initial: {initial_stop:.2f})"
             )
         
-        # Vérifier take profit
-        risk_per_unit = position.entry_price - effective_stop
-        take_profit = position.entry_price + (self.config.strategy.take_profit_r_multiple * risk_per_unit)
-        
-        if close >= take_profit:
-            return Signal(
-                TAKE_PROFIT, close,
-                f"TAKE PROFIT @ {take_profit:.2f} (R={self.config.strategy.take_profit_r_multiple:.1f})"
-            )
+        # Vérifier take profit (UNIQUEMENT si activé)
+        take_profit_r = self.config.strategy.take_profit_r_multiple
+        if take_profit_r is not None:
+            risk_per_unit = position.entry_price - effective_stop
+            if risk_per_unit > 0:
+                take_profit = position.entry_price + (take_profit_r * risk_per_unit)
+                if close >= take_profit:
+                    return Signal(
+                        TAKE_PROFIT, close,
+                        f"TAKE PROFIT @ {take_profit:.2f} (R={take_profit_r:.1f})"
+                    )
         
         return Signal(HOLD, close, "Pas de sortie")
     
     # ------------------------------------------------------------------
     def _calculate_position_size(self, cash: float, price: float, is_initial: bool) -> float:
-        """Calcule la taille de la position."""
+        """Calcule la taille de la position.
+        
+        Pour la stratégie DCA, on utilise dca_percentage du CAPITAL INITIAL
+        pour TOUTES les entrées (initiale et DCA). Cela garantit que :
+        - Entrée initiale : dca_percentage * capital_initial
+        - DCA niveau 1 : dca_percentage * capital_initial
+        - DCA niveau 2 : dca_percentage * capital_initial
+        - Total : dca_levels * dca_percentage * capital_initial (<= 100%)
+        
+        On vérifie aussi que le cash disponible est suffisant.
+        """
         if is_initial:
-            risk_per_trade = self.config.risk.risk_per_trade
-            risk_amount = cash * risk_per_trade
+            # Pour la stratégie DCA, utiliser dca_percentage du capital initial
+            dca_pct = self.config.strategy.dca_percentage
+            initial_cash = self.config.paper.starting_cash
+            position_amount = initial_cash * dca_pct
             
-            # Calculer le stop initial
-            initial_stop = price * (1 - self.config.strategy.initial_stop_percentage / 100)
-            risk_per_unit = price - initial_stop
+            qty = position_amount / price
             
-            if risk_per_unit <= 0:
-                return 0.0
-            
-            qty = risk_amount / risk_per_unit
-            
-            # Vérifier max_position_pct
-            max_qty = (cash * self.config.risk.max_position_pct) / price
+            # Vérifier qu'on a assez de cash disponible
+            max_qty = cash / price
             
             return min(qty, max_qty)
         
@@ -477,13 +484,26 @@ class DCABacktester:
     
     # ------------------------------------------------------------------
     def _calculate_dca_size(self, cash: float, price: float) -> float:
-        """Calcule la taille pour une entrée DCA."""
+        """Calcule la taille pour une entrée DCA.
+        
+        Utilise le CAPITAL INITIAL pour chaque niveau DCA.
+        Chaque niveau DCA utilise dca_percentage du capital initial,
+        pas du cash disponible. Cela garantit que le total DCA ne dépasse
+        pas 100% du capital initial.
+        
+        Exemple: avec dca_percentage=0.33 et starting_cash=10000$ :
+        - DCA niveau 1: 10000 * 0.33 = 3300$ (si cash disponible >= 3300$)
+        - DCA niveau 2: 10000 * 0.33 = 3300$ (si cash disponible >= 3300$)
+        - DCA niveau 3: 10000 * 0.33 = 3300$ (si cash disponible >= 3300$)
+        Total: 9900$ (99% du capital initial)
+        """
         dca_pct = self.config.strategy.dca_percentage
-        dca_amount = self.config.paper.starting_cash * dca_pct
+        initial_cash = self.config.paper.starting_cash
+        dca_amount = initial_cash * dca_pct
         
         qty = dca_amount / price
         
-        # Vérifier qu'on a assez de cash
+        # Vérifier qu'on a assez de cash disponible
         max_qty = cash / price
         
         return min(qty, max_qty)

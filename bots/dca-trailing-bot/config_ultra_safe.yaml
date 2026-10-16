@@ -1,0 +1,58 @@
+# DCA Trailing Bot - Configuration ULTRA-SÛRE pour drawdown < B&H
+# Stratégie : Entrée sur pullback en tendance haussière + Trailing Stop serré
+
+mode: paper
+
+market:
+  product_id: BTC-USDC
+  granularity: SIX_HOUR
+  warmup_bars: 500
+
+strategy:
+  entry_mode: dca_on_pullback
+  
+  # DCA désactivé virtuellement (1 niveau seulement = pas de DCA)
+  dca_levels: 1              # 1 niveau = pas de vrai DCA
+  dca_percentage: 0.33
+  dca_delay_bars: 6
+  dca_pullback_levels: [-5.0]  # Un seul niveau
+  
+  # Entrée sur pullback vers EMA50
+  initial_entry_condition: pullback
+  breakout_lookback: 20
+  
+  # Filtre de tendance STRICT : EMA50 + EMA200
+  trend_filter: true
+  trend_ema: 50
+  trend_slope_lookback: 10
+  
+  # ADX pour éviter les ranges
+  adx_period: 14
+  adx_min: 20
+
+risk:
+  trailing_stop_percentage: 8.0    # 8% serré
+  initial_stop_percentage: 8.0
+  take_profit_r_multiple: 3.0     # Take profit à 3x le risque
+  risk_per_trade: 0.01
+  max_position_pct: 0.33
+  hard_max_loss_pct: 0.05
+  daily_max_loss_pct: 0.03
+  max_drawdown_pct: 0.15
+
+execution:
+  prefer_maker: true
+  limit_offset_bps: 5.0
+  order_timeout_sec: 45
+  stop_exit_is_market: true
+  cooldown_bars: 12          # 12 bougies SIX_HOUR = 3 jours
+  poll_offset_sec: 20
+
+paper:
+  starting_cash: 10000.0
+
+notifications:
+  enabled: false
+
+logging:
+  level: INFO

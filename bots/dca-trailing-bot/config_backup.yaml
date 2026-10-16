@@ -1,0 +1,98 @@
+# ---------------------------------------------------------------------------
+# DCA Trailing Bot - Configuration
+# Stratégie : DCA (3 entrées à 33%) + Trailing Stop 10%
+# Cibles : BTC-USDC, ETH-USDC (Coinbase Advanced Trade)
+# ---------------------------------------------------------------------------
+
+# Mode d'exécution
+mode: paper            # paper | live
+
+# Configuration marché
+market:
+  product_id: BTC-USDC
+  granularity: ONE_HOUR    # ONE_HOUR | SIX_HOUR | ONE_DAY (plus de signaux)
+  warmup_bars: 100
+
+# Stratégie DCA + Trailing Stop
+strategy:
+  # Mode d'entrée
+  entry_mode: dca_on_pullback  # dca_on_pullback | dca_fixed_interval
+  
+  # --- Configuration DCA ---
+  dca_levels: 3                # Nombre de niveaux DCA
+  dca_percentage: 0.33       # % du capital DISPONIBLE par niveau (33%)
+  dca_delay_bars: 1          # Délai entre niveaux (1 bougie = 1 heure) - pour réagir vite aux baisses
+  
+  # Niveaux de pullback pour DCA (en %)
+  dca_pullback_levels: [-2.0, -4.0, -6.0]  # -2%, -4%, -6% vs PLUS HAUT - plus sensible
+  
+  # --- Entrée initiale ---
+  initial_entry_condition: immediate  # Entrer dès que possible
+  breakout_lookback: 20
+  
+  # Pour le mode pullback, on utilise un EMA court (20) comme référence
+  trend_filter: false
+  trend_ema: 20
+  trend_slope_lookback: 20
+  
+  # Confirmation de tendance - DÉSACTIVÉE aussi
+  adx_period: 14
+  adx_min: 0
+
+# Gestion du risque
+risk:
+  # Trailing stop - SERRE pour sortir plus vite et réentrer
+  trailing_stop_percentage: 15.0  # 15% (plus serré pour plus de rotation)
+  initial_stop_percentage: 15.0   # Stop initial (protection)
+  
+  # Take profit - SUPPRIMÉ ou très large pour laisser courir les gains
+  take_profit_r_multiple: null    # null = pas de take profit (laisser courir)
+  take_profit_percentage: null    # null = pas de take profit
+  
+  # Risk per trade (pour la 1ère entrée)
+  risk_per_trade: 0.01            # 1% du capital sur 1ère entrée
+  max_position_pct: 0.33         # 33% max pour 1ère entrée (pour laisser de la marge pour DCA)
+  
+  # Protections
+  hard_max_loss_pct: 0.10        # 10% max loss par trade
+  daily_max_loss_pct: 0.05      # 5% max loss journalière
+  max_drawdown_pct: 0.25        # 25% max drawdown global
+
+# Exécution
+execution:
+  prefer_maker: true
+  limit_offset_bps: 5.0
+  order_timeout_sec: 45
+  stop_exit_is_market: true
+  cooldown_bars: 0              # PAS de cooldown - réentrer immédiatement
+  poll_offset_sec: 20
+
+# Paper trading
+paper:
+  starting_cash: 10000.0        # Capital en USDC
+
+# Notifications
+notifications:
+  enabled: false
+  on_trades: true
+  on_incidents: true
+
+# Discord - CONFIGURÉ POUR VOTRE WEBHOOK
+notifications:
+  enabled: false
+  on_trades: true
+  on_incidents: true
+
+discord:
+  enabled: true                    # ✅ Discord activé
+  webhook_url: "https://discord.com/api/webhooks/1560044752773058620/y_PXLqpSoX1GPU9N4fw3G1WjE0slEOgTHs8fBAvGaroDZ6V6jhmQ4CSs1_DMc6JLpdl2"
+  send_trades: true                 # ✅ Envoyer chaque trade
+  send_daily_report: false          # ❌ Pas encore implémenté
+  send_backtest_results: true       # ✅ Envoyer résultats backtest
+  
+# Logging
+logging:
+  level: INFO
+  state_file: state/bot_state.json
+  trades_csv: logs/trades.csv
+  equity_csv: logs/equity.csv

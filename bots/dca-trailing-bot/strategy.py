@@ -170,18 +170,22 @@ class DCATrailingStrategy:
 
     # ------------------------------------------------------------------
     def _regime_ok(self, row: pd.Series) -> bool:
-        """Le régime est-il haussier ?"""
+        """Le régime est-il haussier ?
+        
+        Avec use_trend_filter=True, on vérifie que la pente de l'EMA est positive
+        (tendance haussière). On n'exige pas price > ema_trend car en pullback,
+        le prix peut être en dessous de l'EMA.
+        """
         if not self.use_trend_filter:
             return True
         
-        price = float(row["close"])
-        ema_trend = row.get("ema_trend")
         slope = row.get("ema_trend_slope")
         
-        if pd.isna(ema_trend) or pd.isna(slope):
+        if pd.isna(slope):
             return False
             
-        return price > ema_trend and slope > 0
+        # Pente EMA positive = tendance haussière
+        return slope > 0
 
     # ------------------------------------------------------------------
     def _adx_ok(self, row: pd.Series) -> bool:
@@ -252,38 +256,43 @@ class DCATrailingStrategy:
         """Évalue une nouvelle entrée.
         
         Utilise initial_entry_condition pour la première entrée :
-        - donchian_breakout : entre sur cassure (achat au plus haut)
-        - pullback : entre sur pullback (achat au plus bas)
+        - donchian_breakout : entre sur cassure (achat au plus haut) - DÉCONSEILLÉ
+        - pullback : entre sur pullback (achat au plus bas) - RECOMMANDÉ
+        - immediate : entre dès que régime et ADX sont OK
         """
-        if not regime_ok:
-            return Signal(
-                HOLD, price, "Régime non haussier (EMA200)",
-                atr=atr_v, adx=0.0
-            )
-        
-        if not adx_ok:
-            return Signal(
-                HOLD, price, f"ADX trop bas ({row.get('adx', 0):.1f} < {self.adx_min})",
-                atr=atr_v, adx=float(row.get("adx", 0))
-            )
-        
-        # Mode pullback : entrer quand le prix redescend vers l'EMA
+        # Pour le mode pullback, on utilise un filtre plus léger :
+        # - On exige price > ema_trend OU slope > 0 (pas les deux)
+        # - Cela permet d'entrer sur un pullback même si la pente est légèrement négative
         if self.initial_entry_condition == "pullback":
-            if data is not None and len(data) >= 2:
-                ema_trend = data["ema_trend"].iloc[-1] if "ema_trend" in data.columns else None
-                if pd.notna(ema_trend):
-                    pullback_from_ema = (price / ema_trend - 1) * 100
-                    
-                    # Entrer si le prix est 0-2% en dessous de l'EMA (pullback)
-                    # et qu'il commence à remonter (prix > prix précédent)
-                    if data is not None and len(data) >= 2:
-                        prev_price = float(data["close"].iloc[-2])
-                        if -2.0 <= pullback_from_ema <= 0.0 and price > prev_price:
-                            return Signal(
-                                ENTER_LONG, price,
-                                f"Pullback vers EMA200 ({pullback_from_ema:.1f}%) | ADX {row.get('adx', 0):.1f}",
-                                atr=atr_v, adx=float(row.get("adx", 0))
-                            )
+            if self.use_trend_filter:
+                ema_trend = row.get("ema_trend")
+                slope = row.get("ema_trend_slope")
+                if pd.notna(ema_trend) and pd.notna(slope):
+                    # Accepter si price > ema_trend OU slope > 0 (pas forcément les deux)
+                    if not (price > ema_trend or slope > 0):
+                        return Signal(
+                            HOLD, price, f"Tendance faiblarde (prix:{price:.2f} vs EMA:{ema_trend:.2f}, pente:{slope:.2f})",
+                            atr=atr_v, adx=0.0
+                        )
+            
+            if not adx_ok:
+                return Signal(
+                    HOLD, price, f"ADX trop bas ({row.get('adx', 0):.1f} < {self.adx_min})",
+                    atr=atr_v, adx=float(row.get("adx", 0))
+                )
+        else:
+            # Pour les autres modes, on exige regime_ok
+            if not regime_ok:
+                return Signal(
+                    HOLD, price, "Régime non haussier (EMA200)",
+                    atr=atr_v, adx=0.0
+                )
+            
+            if not adx_ok:
+                return Signal(
+                    HOLD, price, f"ADX trop bas ({row.get('adx', 0):.1f} < {self.adx_min})",
+                    atr=atr_v, adx=float(row.get("adx", 0))
+                )
         
         # Mode immediate : entrer dès que régime et ADX sont OK
         if self.initial_entry_condition == "immediate":
@@ -303,20 +312,27 @@ class DCATrailingStrategy:
                     atr=atr_v, adx=float(row.get("adx", 0))
                 )
         
-        # Mode pullback : entrer sur pullback vers EMA
+        # Mode pullback : entrer sur pullback vers EMA (RECOMMANDÉ)
         if self.initial_entry_condition == "pullback":
             if data is not None and len(data) >= 2:
                 ema_trend = data["ema_trend"].iloc[-1] if "ema_trend" in data.columns else None
                 if pd.notna(ema_trend):
+                    # Calculer pullback par rapport à EMA
                     pullback_from_ema = (price / ema_trend - 1) * 100
-                    if data is not None and len(data) >= 2:
-                        prev_price = float(data["close"].iloc[-2])
-                        if -2.0 <= pullback_from_ema <= 0.0 and price > prev_price:
-                            return Signal(
-                                ENTER_LONG, price,
-                                f"Pullback vers EMA200 ({pullback_from_ema:.1f}%) | ADX {row.get('adx', 0):.1f}",
-                                atr=atr_v, adx=float(row.get("adx", 0))
-                            )
+                    
+                    # Vérifier que le prix est en pullback (0 à -5% sous EMA)
+                    # et montre des signes de rebond (prix > prix précédent)
+                    prev_price = float(data["close"].iloc[-2])
+                    
+                    # Entrer si :
+                    # 1. Prix est entre -10% et +5% par rapport à EMA20 (plus large pour plus d'opportunités)
+                    # 2. Prix montre des signes de rebond (prix actuel > prix précédent)
+                    if -10.0 <= pullback_from_ema <= 5.0 and price > prev_price:
+                        return Signal(
+                            ENTER_LONG, price,
+                            f"Pullback vers EMA200 ({pullback_from_ema:.1f}%) + rebond | ADX {row.get('adx', 0):.1f}",
+                            atr=atr_v, adx=float(row.get("adx", 0))
+                        )
         
         return Signal(HOLD, price, "Pas de signal d'entrée", atr=atr_v, adx=0.0)
 
@@ -332,9 +348,15 @@ class DCATrailingStrategy:
     ) -> Signal:
         """Évalue une position avec DCA active.
         
-        Logique :
-        - Phase 1 : Accumulation (DCA) - NE PAS SORTIR
-        - Phase 2 : Trailing Stop - SORTIR si stop ou take profit touché
+        NOUVELLE LOGIQUE :
+        - Phase 1 : Accumulation (DCA) - NE PAS SORTIR tant que DCA possible
+        - Phase 2 : Trailing Stop - SORTIR uniquement si stop touché
+        
+        LES DCA SE DÉCLENCHENT PAR RAPPORT AU PLUS HAUT (highest_high),
+        PAS PAR RAPPORT AU PRIX D'ENTRÉE INITIAL.
+        
+        Cela permet d'acheter sur les baisses par rapport au sommet,
+        ce qui est la bonne stratégie pour battre le buy and hold.
         """
         # Mettre à jour le plus haut
         dca_state.highest_high = max(dca_state.highest_high, float(row["high"]))
@@ -344,27 +366,29 @@ class DCATrailingStrategy:
             # Vérifier délai depuis dernière DCA
             if current_bar - dca_state.last_dca_bar < self.dca_delay_bars:
                 # Attendre le délai
+                pullback_from_high = (price / dca_state.highest_high - 1) * 100
                 return Signal(
                     HOLD, price,
-                    f"Attente délai DCA (niveau {dca_state.current_dca_level + 1})",
+                    f"Attente délai DCA (niveau {dca_state.current_dca_level + 1}) | pullback: {pullback_from_high:.1f}%",
                     adx=0, atr=atr_v
                 )
             
-            # Vérifier pullback suffisant
-            pullback_pct = (price / dca_state.entry_price - 1) * 100
+            # CORRECTIF : Calculer pullback par rapport au PLUS HAUT (highest_high)
+            # Cela permet d'acheter sur les baisses par rapport au sommet
+            pullback_from_high_pct = (price / dca_state.highest_high - 1) * 100
             required_pullback = self.dca_pullback_levels[dca_state.current_dca_level]
             
-            if pullback_pct <= required_pullback:
+            if pullback_from_high_pct <= required_pullback:
                 next_level = dca_state.current_dca_level + 1
                 return Signal(
                     DCA_ENTER, price,
-                    f"DCA Niveau {next_level} : pullback {pullback_pct:.1f}% <= {required_pullback}%",
+                    f"DCA Niveau {next_level} : pullback {pullback_from_high_pct:.1f}% vs PLUS HAUT (seuil: {required_pullback}%)",
                     dca_level=next_level,
                     adx=0, atr=atr_v
                 )
             
             # NE PAS VÉRIFIER LA SORTIE pendant la phase DCA
-            return Signal(HOLD, price, f"En attente DCA (pullback: {pullback_pct:.1f}%)", adx=0, atr=atr_v)
+            return Signal(HOLD, price, f"Phase DCA : attente pullback (actuel: {pullback_from_high_pct:.1f}% vs plus haut)", adx=0, atr=atr_v)
         
         # PHASE 2 : TRAILING STOP - Toutes les DCA faites
         # Calculer le trailing stop
@@ -372,11 +396,7 @@ class DCATrailingStrategy:
         initial_stop = dca_state.entry_price * (1 - self.initial_stop_pct / 100)
         effective_stop = max(trailing_stop, initial_stop)
         
-        # Calculer le take profit
-        risk_per_unit = dca_state.entry_price - effective_stop
-        take_profit = dca_state.entry_price + (self.take_profit_r_multiple * risk_per_unit)
-        
-        # Vérifier sortie par stop
+        # Vérifier sortie par stop (UNIQUEMENT en phase 2)
         if float(row["low"]) <= effective_stop:
             return Signal(
                 EXIT, price,
@@ -384,35 +404,7 @@ class DCATrailingStrategy:
                 adx=0, atr=atr_v
             )
         
-        # Vérifier take profit
-        if price >= take_profit:
-            return Signal(
-                TAKE_PROFIT, price,
-                f"TAKE PROFIT @ {take_profit:.2f} (R={self.take_profit_r_multiple:.1f})",
-                adx=0, atr=atr_v
-            )
-            # Vérifier délai depuis dernière DCA
-            if current_bar - dca_state.last_dca_bar < self.dca_delay_bars:
-                return Signal(
-                    HOLD, price,
-                    f"Attente délai DCA (niveau {dca_state.current_dca_level + 1})",
-                    adx=0, atr=atr_v
-                )
-            
-            # Vérifier pullback suffisant
-            pullback_pct = (price / dca_state.entry_price - 1) * 100
-            required_pullback = self.dca_pullback_levels[dca_state.current_dca_level]
-            
-            if pullback_pct <= required_pullback:
-                next_level = dca_state.current_dca_level + 1
-                return Signal(
-                    DCA_ENTER, price,
-                    f"DCA Niveau {next_level} : pullback {pullback_pct:.1f}% <= {required_pullback}%",
-                    dca_level=next_level,
-                    adx=0, atr=atr_v
-                )
-        
-        return Signal(HOLD, price, "Position DCA en cours", adx=0, atr=atr_v)
+        return Signal(HOLD, price, "Phase 2 : position complète, trailing stop actif", adx=0, atr=atr_v)
 
     # ------------------------------------------------------------------
     def _evaluate_position_exit(
@@ -432,10 +424,6 @@ class DCATrailingStrategy:
         initial_stop = dca_state.entry_price * (1 - self.initial_stop_pct / 100)
         effective_stop = max(trailing_stop, initial_stop)
         
-        # Calculer le take profit
-        risk_per_unit = dca_state.entry_price - effective_stop
-        take_profit = dca_state.entry_price + (self.take_profit_r_multiple * risk_per_unit)
-        
         # Vérifier sortie par stop
         if float(row["low"]) <= effective_stop:
             return Signal(
@@ -444,13 +432,17 @@ class DCATrailingStrategy:
                 adx=0, atr=atr_v
             )
         
-        # Vérifier take profit
-        if price >= take_profit:
-            return Signal(
-                TAKE_PROFIT, price,
-                f"TAKE PROFIT @ {take_profit:.2f} (R={self.take_profit_r_multiple:.1f})",
-                adx=0, atr=atr_v
-            )
+        # Vérifier take profit (UNIQUEMENT si activé)
+        if self.take_profit_r_multiple is not None:
+            risk_per_unit = dca_state.entry_price - effective_stop
+            if risk_per_unit > 0:
+                take_profit = dca_state.entry_price + (self.take_profit_r_multiple * risk_per_unit)
+                if price >= take_profit:
+                    return Signal(
+                        TAKE_PROFIT, price,
+                        f"TAKE PROFIT @ {take_profit:.2f} (R={self.take_profit_r_multiple:.1f})",
+                        adx=0, atr=atr_v
+                    )
         
         return Signal(HOLD, price, "Position en cours", adx=0, atr=atr_v)
 

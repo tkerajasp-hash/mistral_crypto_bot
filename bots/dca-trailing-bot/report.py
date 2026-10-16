@@ -97,12 +97,11 @@ class ReportGenerator:
         # Tracer le prix
         ax1.plot(data.index, data["close"], color="#7F8C8D", alpha=0.5, label="Prix (USDC)")
         
-        # Ajouter un titre explicatif
+        # Ajouter un titre clair et visible
         ax1.set_title(
-            f"Stratégie DCA + Trailing Stop - {product_id}\n"
-            f"📌 Entrées : Vert (Init) / Bleu (DCA) | Sorties : Rouge (Stop) / Violet (Take Profit)\n"
-            f"📊 Logique : Entre → Ajoute DCA à -5%, -10%, -15% → Trailing Stop 10% sous le plus haut",
-            fontsize=12, fontweight='bold', pad=20
+            f"📈 **SIGNAUX DE TRADING - {product_id}**\n"
+            f"🟢 Entrées Init | 🟦 Entrées DCA | 🔴 Sorties Stop | 🟪 Sorties Take Profit",
+            fontsize=16, fontweight='bold', pad=20
         )
         
         # Tracer les signaux
@@ -113,7 +112,7 @@ class ReportGenerator:
                 marker = "o" if trade.dca_level == 0 else "s"
                 ax1.scatter(
                     trade.entry_time, trade.entry_price,
-                    color=color, marker=marker, s=100, zorder=5,
+                    color=color, marker=marker, s=150, zorder=5,
                     label=f"Entrée{' DCA' if trade.is_dca else ''} L{trade.dca_level}"
                 )
             
@@ -123,13 +122,12 @@ class ReportGenerator:
                 marker = "^"
                 ax1.scatter(
                     trade.exit_time, trade.exit_price,
-                    color=color, marker=marker, s=100, zorder=5,
-                    label=f"Sortie: {trade.reason[:20]}"
+                    color=color, marker=marker, s=150, zorder=5,
+                    label=f"Sortie: {trade.reason[:30]}"
                 )
         
         # Légende et labels
-        ax1.set_title(f"Signaux de Trading - {product_id}", fontsize=14, fontweight='bold')
-        ax1.set_ylabel("Prix (USDC)")
+        ax1.set_ylabel("Prix (USDC)", fontsize=12, fontweight='bold')
         ax1.grid(True, alpha=0.3)
         
         # Formater l'axe des dates
@@ -170,44 +168,44 @@ class ReportGenerator:
         """Génère un graphe avec le PnL cumulé."""
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), gridspec_kw={'height_ratios': [2, 1]})
         
-        # Ajouter un titre explicatif
-        ax1.set_title(
-            f"Performance Financière - {product_id}\n"
-            f"📈 Ligne Bleue = Capital avec stratégie | Ligne Grise = Buy & Hold\n"
-            f"⬇️  Graphe du bas = Drawdown (pourcentage de perte par rapport au pic)",
-            fontsize=12, fontweight='bold', pad=20
-        )
-        
         # Graphe 1: Equity Curve
         equity = result.equity_curve
+        
+        # Ajouter un titre clair et visible
+        ax1.set_title(
+            f"💰 **PERFORMANCE - {product_id}**\n"
+            f"🔵 Ligne Bleue = Stratégie | ⚪ Ligne Grise = Buy & Hold | 🔴 Pointillés = Pic Equity",
+            fontsize=16, fontweight='bold', pad=20
+        )
+        
         if len(equity) > 0:
-            ax1.plot(equity.index, equity, color=COLORS["equity"], linewidth=2, label="Equity (Stratégie)")
+            ax1.plot(equity.index, equity, color=COLORS["equity"], linewidth=3, label="Stratégie DCA Trailing")
             
             # Tracer Buy & Hold
             data = self._get_price_data(result)
             if data is not None and len(data) > 0:
                 bh_start = float(data.iloc[0]["close"])
                 bh = data["close"] / bh_start * result.stats.get("start_equity", 10000)
-                ax1.plot(data.index, bh, color=COLORS["bh"], linestyle="--", linewidth=1.5, label="Buy & Hold")
+                ax1.plot(data.index, bh, color=COLORS["bh"], linestyle="--", linewidth=2, label="Buy & Hold")
             
             # Tracer le pic
             peak = equity.cummax()
-            ax1.plot(equity.index, peak, color="#E74C3C", linestyle=":", linewidth=1, label="Pic Equity")
+            ax1.plot(equity.index, peak, color="#E74C3C", linestyle=":", linewidth=1.5, label="Pic Equity")
             
-            ax1.set_title(f"Equity Curve - {product_id}", fontsize=14, fontweight='bold')
-            ax1.set_ylabel("Capital (USDC)")
+            ax1.set_ylabel("Capital (USDC)", fontsize=12, fontweight='bold')
             ax1.grid(True, alpha=0.3)
-            ax1.legend(loc='upper left')
+            ax1.legend(loc='upper left', fontsize=10)
         
         # Graphe 2: Drawdown
         if len(equity) > 0:
             roll_max = equity.cummax()
             drawdown = (equity - roll_max) / roll_max * 100
-            ax2.plot(equity.index, drawdown, color=COLORS["loss"], linewidth=1.5, label="Drawdown %")
+            ax2.plot(equity.index, drawdown, color=COLORS["loss"], linewidth=2, label="Drawdown %")
             ax2.axhline(0, color="black", linestyle="-", linewidth=0.5)
-            ax2.set_ylabel("Drawdown (%)")
+            ax2.set_title("⬇️ **DRAWDOWN (perte par rapport au pic)**", fontsize=14, fontweight='bold')
+            ax2.set_ylabel("Drawdown (%)", fontsize=12, fontweight='bold')
             ax2.grid(True, alpha=0.3)
-            ax2.legend(loc='upper right')
+            ax2.legend(loc='upper right', fontsize=10)
         
         # Formater les axes
         for ax in [ax1, ax2]:
