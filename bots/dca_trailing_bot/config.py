@@ -32,6 +32,25 @@ class StrategyConfig:
     dca_percentage: float = 0.33
     dca_delay_bars: int = 6
     dca_pullback_levels: list[float] = field(default_factory=lambda: [-5.0, -10.0, -15.0])
+    dca_use_atr_levels: bool = False
+    dca_pullback_atr_multipliers: list[float] = field(default_factory=lambda: [1.5, 2.5, 3.5])
+    
+    # NOUVELLES OPTIONS: DCA sur fonds disponibles
+    use_available_funds: bool = False
+    dca_available_funds_percentage: float = 0.50
+    
+    # NOUVELLES OPTIONS: Confirmation DCA
+    use_dca_confirmation: bool = False
+    dca_confirmation_mode: str = "rsi_ema"
+    
+    # NOUVELLES OPTIONS: Filtre de tendance renforcé
+    use_enhanced_trend_filter: bool = False
+    trend_ema_fast: int = 50
+    
+    # NOUVELLES OPTIONS: RSI
+    rsi_period: int = 14
+    rsi_oversold: float = 30.0
+    confirm_ema_fast: int = 20
     
     # Entrée initiale
     initial_entry_condition: str = "donchian_breakout"
@@ -161,6 +180,28 @@ def load_config(config_path: str = "config.yaml") -> BotConfig:
             config.strategy.dca_delay_bars = strat["dca_delay_bars"]
         if "dca_pullback_levels" in strat:
             config.strategy.dca_pullback_levels = strat["dca_pullback_levels"]
+        if "dca_use_atr_levels" in strat:
+            config.strategy.dca_use_atr_levels = strat["dca_use_atr_levels"]
+        if "dca_pullback_atr_multipliers" in strat:
+            config.strategy.dca_pullback_atr_multipliers = strat["dca_pullback_atr_multipliers"]
+        if "use_available_funds" in strat:
+            config.strategy.use_available_funds = strat["use_available_funds"]
+        if "dca_available_funds_percentage" in strat:
+            config.strategy.dca_available_funds_percentage = strat["dca_available_funds_percentage"]
+        if "use_dca_confirmation" in strat:
+            config.strategy.use_dca_confirmation = strat["use_dca_confirmation"]
+        if "dca_confirmation_mode" in strat:
+            config.strategy.dca_confirmation_mode = strat["dca_confirmation_mode"]
+        if "use_enhanced_trend_filter" in strat:
+            config.strategy.use_enhanced_trend_filter = strat["use_enhanced_trend_filter"]
+        if "trend_ema_fast" in strat:
+            config.strategy.trend_ema_fast = strat["trend_ema_fast"]
+        if "rsi_period" in strat:
+            config.strategy.rsi_period = strat["rsi_period"]
+        if "rsi_oversold" in strat:
+            config.strategy.rsi_oversold = strat["rsi_oversold"]
+        if "confirm_ema_fast" in strat:
+            config.strategy.confirm_ema_fast = strat["confirm_ema_fast"]
         if "trailing_stop_percentage" in strat:
             config.strategy.trailing_stop_percentage = strat["trailing_stop_percentage"]
         if "initial_stop_percentage" in strat:

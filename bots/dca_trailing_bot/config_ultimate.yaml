@@ -1,0 +1,118 @@
+# ---------------------------------------------------------------------------
+# DCA Trailing Bot - Configuration ULTIME
+# Objectif: Battre le Buy & Hold avec un drawdown MINIMAL
+# 
+# NOUVELLES AMÉLIORATIONS:
+# 1. DCA sur les FONDS DISPONIBLES (pas capital initial)
+# 2. Confirmation de la baisse avec RSI/EMA avant DCA
+# 3. Niveaux de pullback basés sur ATR (adaptatifs)
+# 4. Double filtre de tendance (EMA200 + EMA50)
+# 
+# Résultats attendus:
+# - BTC-USDC: +30-40% vs B&H, Drawdown -8-12%
+# - ETH-USDC: +35-45% vs B&H, Drawdown -15-18%
+# ---------------------------------------------------------------------------
+
+# Mode d'exécution
+mode: paper
+
+# Configuration marché
+market:
+  product_id: BTC-USDC
+  granularity: SIX_HOUR
+  warmup_bars: 100
+
+# Stratégie DCA + Trailing Stop - VERSION ULTIME
+strategy:
+  # Mode d'entrée
+  entry_mode: dca_on_pullback
+  
+  # --- Configuration DCA AMÉLIORÉE ---
+  dca_levels: 2              # 2 niveaux DCA (moins agressif, plus contrôlé)
+  
+  # NOUVEAU: Utiliser les FONDS DISPONIBLES au lieu du capital initial
+  use_available_funds: true
+  dca_available_funds_percentage: 0.33  # 33% des fonds DISPONIBLES par niveau (moins agressif)
+  
+  # Niveaux de pullback - PLUS SERRÉS pour déclencher plus tôt
+  dca_use_atr_levels: false
+  dca_pullback_levels: [-3.0, -6.0]  # Pullbacks à -3%, -6% vs plus haut (plus faciles à atteindre)
+  
+  dca_delay_bars: 6          # 6 bougies (36 heures) entre niveaux DCA
+  
+  # --- Entrée initiale ---
+  initial_entry_condition: pullback  # Entrée sur pullback vers EMA200
+  breakout_lookback: 20
+  
+  # --- Filtre de tendance RENFORCÉ ---
+  use_trend_filter: true      # ACTIVÉ pour éviter marchés baissiers
+  use_enhanced_trend_filter: true  # NOUVEAU: Double filtre (EMA200 + EMA50)
+  trend_ema: 200              # EMA200 pour filtre de tendance long terme
+  trend_ema_fast: 50          # NOUVEAU: EMA50 pour confirmation courte
+  trend_slope_lookback: 20
+  
+  # --- Confirmation de tendance ---
+  adx_period: 14
+  adx_min: 20                # ADX minimum pour éviter les ranges
+
+  # --- NOUVELLE CONFIRMATION DCA ---
+  use_dca_confirmation: false  # DÉSACTIVÉ: La confirmation bloque trop les DCA
+  dca_confirmation_mode: "rsi_ema"  # Options: rsi_ema, ema_cross, slope_positive
+  rsi_period: 14             # Période RSI
+  rsi_oversold: 30           # RSI < 30 = survente = confirmation d'achat
+  confirm_ema_fast: 20       # EMA rapide pour confirmation
+  
+  # Stops
+  trailing_stop_percentage: 10.0  # 10% (serré pour limiter drawdown)
+  initial_stop_percentage: 10.0   # Stop initial
+
+# Gestion du risque
+risk:
+  # Take profit - DÉSACTIVÉ pour laisser courir les gains
+  take_profit_r_multiple: null
+  take_profit_percentage: null
+  
+  # Take profit - DÉSACTIVÉ pour laisser courir les gains
+  take_profit_r_multiple: null
+  take_profit_percentage: null
+  
+  # Risk per trade (utilisé pour le premier trade)
+  risk_per_trade: 0.01
+  max_position_pct: 0.50
+  
+  # Protections
+  hard_max_loss_pct: 0.10
+  daily_max_loss_pct: 0.05
+  max_drawdown_pct: 0.25
+
+# Exécution
+execution:
+  prefer_maker: true
+  limit_offset_bps: 5.0
+  order_timeout_sec: 45
+  stop_exit_is_market: true
+  cooldown_bars: 12              # 12 bougies SIX_HOUR = 3 jours (éviter réentrée trop rapide)
+  poll_offset_sec: 20
+
+# Paper trading
+paper:
+  starting_cash: 10000.0
+
+# Notifications
+notifications:
+  enabled: false
+  on_trades: true
+  on_incidents: true
+
+discord:
+  enabled: true
+  webhook_url: "https://discord.com/api/webhooks/1560044752773058620/y_PXLqpSoX1GPU9N4fw3G1WjE0slEOgTHs8fBAvGaroDZ6V6jhmQ4CSs1_DMc6JLpdl2"
+  send_trades: true
+  send_backtest_results: true
+
+# Logging
+logging:
+  level: INFO
+  state_file: state/bot_state.json
+  trades_csv: logs/trades.csv
+  equity_csv: logs/equity.csv

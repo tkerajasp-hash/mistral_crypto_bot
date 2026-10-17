@@ -139,22 +139,35 @@ class DCABacktester:
     # ------------------------------------------------------------------
     def _create_strategy(self) -> DCATrailingStrategy:
         """Crée la stratégie depuis la config."""
+        strat_config = self.config.strategy
         return DCATrailingStrategy(
-            entry_mode=self.config.strategy.entry_mode,
-            initial_entry_condition=getattr(self.config.strategy, 'initial_entry_condition', 'donchian_breakout'),
-            dca_levels=self.config.strategy.dca_levels,
-            dca_percentage=self.config.strategy.dca_percentage,
-            dca_delay_bars=self.config.strategy.dca_delay_bars,
-            dca_pullback_levels=self.config.strategy.dca_pullback_levels,
-            trailing_stop_pct=self.config.strategy.trailing_stop_percentage,
-            initial_stop_pct=self.config.strategy.initial_stop_percentage,
-            take_profit_r_multiple=self.config.strategy.take_profit_r_multiple,
-            trend_ema=self.config.strategy.trend_ema,
-            trend_slope_lookback=self.config.strategy.trend_slope_lookback,
-            breakout_lookback=self.config.strategy.breakout_lookback,
-            adx_period=self.config.strategy.adx_period,
-            adx_min=self.config.strategy.adx_min,
-            use_trend_filter=self.config.strategy.use_trend_filter,
+            entry_mode=strat_config.entry_mode,
+            initial_entry_condition=getattr(strat_config, 'initial_entry_condition', 'donchian_breakout'),
+            dca_levels=strat_config.dca_levels,
+            dca_percentage=strat_config.dca_percentage,
+            dca_delay_bars=strat_config.dca_delay_bars,
+            dca_pullback_levels=strat_config.dca_pullback_levels,
+            dca_use_atr_levels=getattr(strat_config, 'dca_use_atr_levels', False),
+            dca_pullback_atr_multipliers=getattr(strat_config, 'dca_pullback_atr_multipliers', [1.5, 2.5, 3.5]),
+            trailing_stop_pct=strat_config.trailing_stop_percentage,
+            initial_stop_pct=strat_config.initial_stop_percentage,
+            take_profit_r_multiple=strat_config.take_profit_r_multiple,
+            trend_ema=strat_config.trend_ema,
+            trend_slope_lookback=strat_config.trend_slope_lookback,
+            breakout_lookback=strat_config.breakout_lookback,
+            adx_period=strat_config.adx_period,
+            adx_min=strat_config.adx_min,
+            use_trend_filter=strat_config.use_trend_filter,
+            # NOUVELLES OPTIONS
+            use_available_funds=getattr(strat_config, 'use_available_funds', False),
+            dca_available_funds_percentage=getattr(strat_config, 'dca_available_funds_percentage', 0.50),
+            use_dca_confirmation=getattr(strat_config, 'use_dca_confirmation', False),
+            dca_confirmation_mode=getattr(strat_config, 'dca_confirmation_mode', 'rsi_ema'),
+            use_enhanced_trend_filter=getattr(strat_config, 'use_enhanced_trend_filter', False),
+            trend_ema_fast=getattr(strat_config, 'trend_ema_fast', 50),
+            rsi_period=getattr(strat_config, 'rsi_period', 14),
+            rsi_oversold=getattr(strat_config, 'rsi_oversold', 30.0),
+            confirm_ema_fast=getattr(strat_config, 'confirm_ema_fast', 20),
         )
     
     # ------------------------------------------------------------------
@@ -174,7 +187,8 @@ class DCABacktester:
         # Initialisation
         cash = self.config.paper.starting_cash
         position: Optional[Position] = None
-        dca_state = DCAState()
+        # NOUVEAU: Initialiser DCAState avec le capital initial
+        dca_state = self.strategy.create_dca_state(initial_cash=cash)
         
         equity_points: list[tuple[datetime, float]] = []
         trades: list[Trade] = []
@@ -288,9 +302,16 @@ class DCABacktester:
             if signal.action in (ENTER_LONG, DCA_ENTER):
                 if position is None:
                     # Nouvelle position
-                    qty = self._calculate_position_size(
-                        cash, close, signal.action == ENTER_LONG
-                    )
+                    # NOUVEAU: Utiliser les fonds disponibles pour l'entrée initiale aussi
+                    if hasattr(self.config.strategy, 'use_available_funds') and self.config.strategy.use_available_funds:
+                        entry_percentage = self.config.strategy.dca_available_funds_percentage
+                        entry_amount = dca_state.available_funds * entry_percentage
+                    else:
+                        entry_percentage = self.config.strategy.dca_percentage
+                        entry_amount = self.config.paper.starting_cash * entry_percentage
+                    
+                    qty = entry_amount / close
+                    
                     if qty <= 0:
                         continue
                     
@@ -311,6 +332,10 @@ class DCABacktester:
                     )
                     
                     cash -= cost
+                    
+                    # NOUVEAU: Mettre à jour les fonds disponibles
+                    dca_state.available_funds -= (qty * close)
+                    
                     dca_state.on_enter(close, self.config.strategy.initial_stop_percentage, is_dca=False)
                     
                     # Enregistrer l'entrée initiale
@@ -321,8 +346,17 @@ class DCABacktester:
                     if i - dca_state.last_dca_bar < self.config.strategy.dca_delay_bars:
                         continue
                     
-                    # Calculer la quantité pour DCA (33% du capital initial)
-                    dca_qty = self._calculate_dca_size(cash, close)
+                    # NOUVEAU: Calculer la quantité pour DCA basée sur les FONDS DISPONIBLES
+                    if hasattr(self.config.strategy, 'use_available_funds') and self.config.strategy.use_available_funds:
+                        # Utiliser un % des fonds DISPONIBLES
+                        dca_percentage = self.config.strategy.dca_available_funds_percentage
+                        dca_amount = dca_state.available_funds * dca_percentage
+                    else:
+                        # Ancien système: % du capital initial
+                        dca_percentage = self.config.strategy.dca_percentage
+                        dca_amount = self.config.paper.starting_cash * dca_percentage
+                    
+                    dca_qty = dca_amount / close
                     if dca_qty <= 0:
                         continue
                     
@@ -337,6 +371,9 @@ class DCABacktester:
                     position.add_dca(close, dca_qty, dca_fee)
                     cash -= dca_cost
                     total_fees += dca_fee
+                    
+                    # NOUVEAU: Mettre à jour les fonds disponibles dans dca_state
+                    dca_state.available_funds -= (dca_qty * close)
                     
                     dca_state.on_enter(close, self.config.strategy.initial_stop_percentage, is_dca=True, dca_level=position.dca_level)
                     dca_state.last_dca_bar = i

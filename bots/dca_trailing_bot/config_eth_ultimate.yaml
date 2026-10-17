@@ -1,0 +1,109 @@
+# ---------------------------------------------------------------------------
+# DCA Trailing Bot - Configuration ULTIME pour ETH-USDC
+# Objectif: Battre le Buy & Hold avec drawdown < 15%
+# 
+# Adapté pour ETH qui est plus volatile que BTC:
+# - Trailing stop plus serré (12%)
+# - Moins de DCA (1 niveau seulement)
+# - Pullback plus shallow
+# ---------------------------------------------------------------------------
+
+# Mode d'exécution
+mode: paper
+
+# Configuration marché
+market:
+  product_id: ETH-USDC
+  granularity: SIX_HOUR
+  warmup_bars: 100
+
+# Stratégie DCA + Trailing Stop - VERSION ULTIME POUR ETH
+strategy:
+  # Mode d'entrée
+  entry_mode: dca_on_pullback
+  
+  # --- Configuration DCA pour ETH - DÉSACTIVÉ ---
+  dca_levels: 1              # 1 niveau (ne déclenchera pas)
+  
+  # NOUVEAU: Utiliser les FONDS DISPONIBLES
+  use_available_funds: true
+  dca_available_funds_percentage: 0.01  # Très petit pourcentage
+  
+  # Niveaux de pullback - TRÈS PROFOND pour éviter déclenchement
+  dca_use_atr_levels: false
+  dca_pullback_levels: [-99.0]  # Très profond, ne déclenchera jamais
+  
+  dca_delay_bars: 6          # 6 bougies (36 heures)
+  
+  # --- Entrée initiale ---
+  initial_entry_condition: pullback
+  breakout_lookback: 20
+  
+  # --- Filtre de tendance - PLUS LÉGER POUR ETH ---
+  use_trend_filter: true
+  use_enhanced_trend_filter: false  # Désactivé pour ETH (trop restrictif)
+  trend_ema: 50  # EMA50 plus réactif pour ETH
+  trend_ema_fast: 50
+  trend_slope_lookback: 20
+  
+  # --- Confirmation de tendance - DÉSACTIVÉE POUR ETH ---
+  adx_period: 14
+  adx_min: 0  # Désactivé (trop restrictif pour ETH)
+
+  # --- CONFIRMATION DCA - ACTIVÉE POUR ETH ---
+  use_dca_confirmation: true
+  dca_confirmation_mode: "slope_positive"  # Attendre que pente EMA devienne positive
+  rsi_period: 14
+  rsi_oversold: 30
+  confirm_ema_fast: 20
+  
+  # Stops
+  trailing_stop_percentage: 10.0  # 10%
+  initial_stop_percentage: 10.0
+
+# Gestion du risque
+risk:
+  # Take profit - DÉSACTIVÉ
+  take_profit_r_multiple: null
+  take_profit_percentage: null
+  
+  # Risk per trade
+  risk_per_trade: 0.01
+  max_position_pct: 0.50
+  
+  # Protections
+  hard_max_loss_pct: 0.10
+  daily_max_loss_pct: 0.05
+  max_drawdown_pct: 0.20
+
+# Exécution
+execution:
+  prefer_maker: true
+  limit_offset_bps: 5.0
+  order_timeout_sec: 45
+  stop_exit_is_market: true
+  cooldown_bars: 12
+  poll_offset_sec: 20
+
+# Paper trading
+paper:
+  starting_cash: 10000.0
+
+# Notifications
+notifications:
+  enabled: false
+  on_trades: true
+  on_incidents: true
+
+discord:
+  enabled: false
+  webhook_url: ""
+  send_trades: true
+  send_backtest_results: true
+
+# Logging
+logging:
+  level: INFO
+  state_file: state/bot_state.json
+  trades_csv: logs/trades.csv
+  equity_csv: logs/equity.csv
