@@ -1,0 +1,74 @@
+# ---------------------------------------------------------------------------
+# Configuration du bot de trading swing (tendance haussiere, Coinbase spot)
+# ---------------------------------------------------------------------------
+# Toutes les valeurs peuvent etre reglees ici. Les secrets restent dans .env.
+
+mode: paper            # paper | live   (live exige aussi le flag CLI explicite)
+
+market:
+  product_id: BTC-USDC     # paire spot par defaut (surchargeable : python -m bot -p ETH-USDC ...)
+  granularity: ONE_HOUR    # ONE_HOUR | TWO_HOUR | SIX_HOUR | ONE_DAY (swing)
+  warmup_bars: 400         # nb de bougies chargees pour amorcer les indicateurs
+
+strategy:
+  entry_mode: donchian_breakout   # donchian_breakout | ema_cross
+  # --- Filtre de regime : on ne prend QUE le sens de la tendance de fond ---
+  trend_ema: 200           # au-dessus = marche haussier
+  trend_slope_lookback: 20 # la EMA200 doit monter sur N bougies
+  # --- Declencheur d'entree ---
+  breakout_lookback: 20    # cassure du plus haut des 20 dernieres bougies (Turtle-style)
+  ema_fast: 20             # utilise seulement si entry_mode = ema_cross
+  ema_slow: 50
+  # --- Confirmation de force de tendance (evite les faux signaux en range) ---
+  adx_period: 14
+  adx_min: 22              # ADX sous ce seuil = pas de trade
+  # --- Filtre unite de temps superieure (optionnel) ---
+  htf_filter: true
+  htf_granularity: ONE_DAY
+  htf_ema: 50              # daily close doit etre > EMA50 daily
+  # --- Sortie tendance (en plus du stop) ---
+  exit_lookback: 10        # cassure du plus bas des 10 dernieres bougies
+
+risk:
+  risk_per_trade: 0.0075   # 0.75% de l'equity risquee entre l'entree et le stop initial
+  max_position_pct: 0.95   # part max de l'equity investie sur une position
+  atr_period: 14
+  initial_stop_atr: 2.5    # stop initial = entree - 2.5 * ATR
+  trailing_atr: 3.0        # stop suiveur "chandelier" = plus_haut_depuis_entree - 3 * ATR
+  breakeven_at_r: 1.0      # a +1R de gain latent, on remonte le stop au point mort
+  breakeven_offset_atr: 0.25
+  hard_max_loss_pct: 0.06  # garde-fou absolu : perte max toleree sur un trade
+  daily_max_loss_pct: 0.04 # si l'equity du jour perd 4%, on solde et on stoppe la journee
+  max_drawdown_pct: 0.25   # drawdown global -> arret complet (kill switch)
+
+fees:
+  # BTC-USDC est souvent a 0 frais sur Coinbase Advanced Trade, mais on reste prudent.
+  maker_bps: 0.0           # frais ordre maker (limit post-only) en points de base
+  taker_bps: 0.0           # frais ordre taker (market)
+  assumed_roundtrip_bps: 10.0  # utilise par le backtest pour ne pas se mentir
+  slippage_bps: 2.0
+
+execution:
+  prefer_maker: true       # entrees/sorties en limit post-only (0 frais, pas de slippage)
+  limit_offset_bps: 5.0    # place le limit a 5 bps a l'interieur du spread
+  order_timeout_sec: 45    # si non rempli -> annule (pas de course au prix)
+  stop_exit_is_market: true  # une sortie sur stop DOIT passer (market) pour garantir le fill
+  cooldown_bars: 3         # nb de bougies d'attente apres une sortie avant de re-rentrer
+  min_edge_atr: 1.0        # n'entre que si l'ATR (mouvement attendu) >> cout aller-retour
+  poll_offset_sec: 20      # on evalue N secondes apres la cloture de bougie
+
+paper:
+  starting_cash: 10000.0   # capital virtuel de depart (devise de cotation, ici USDC)
+
+notifications:
+  # Envoi Telegram. Le token du bot et le chat_id vont dans .env
+  # (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID). Si l'un des deux manque -> desactive.
+  enabled: false           # true = alertes de trade en direct + `bot report`
+  on_trades: true          # message a chaque ENTREE / SORTIE (pendant paper/live)
+  on_incidents: true        # message si pause journaliere / kill switch drawdown
+
+logging:
+  level: INFO
+  state_file: state/bot_state.json
+  trades_csv: logs/trades.csv
+  equity_csv: logs/equity.csv

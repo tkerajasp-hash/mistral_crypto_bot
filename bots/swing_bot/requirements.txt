@@ -1,0 +1,8 @@
+# Runtime dependencies
+coinbase-advanced-py>=1.7.0     # Official Coinbase Advanced Trade SDK (live orders + auth)
+pandas>=2.0
+numpy>=1.24
+PyYAML>=6.0
+python-dotenv>=1.0
+requests>=2.31                  # data publique + envoi Telegram (bot API)
+matplotlib>=3.7                 # graphe d'equity du digest `bot report`

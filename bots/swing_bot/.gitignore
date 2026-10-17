@@ -1,0 +1,27 @@
+# Secrets
+.env
+*.pem
+
+# Runtime output (fichiers suffixes par paire : _BTC-USDC, _ETH-USDC, ...)
+/state/*.json
+/logs/*.log
+/logs/*.csv
+/data/*.csv
+/data/*.parquet
+/data/*.png
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# OS
+.DS_Store
+!.gitkeep
+
+# Dashboard genere
+/dashboard*.html
+/data/dashboard_data*.json

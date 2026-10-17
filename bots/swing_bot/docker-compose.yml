@@ -1,0 +1,50 @@
+# docker-compose.yml pour le Bot de Trading sur QNAP
+# =====================================================
+# Ce fichier permet de lancer les deux bots (BTC et ETH) en parallèle
+# sur ton NAS QNAP avec Docker
+
+version: '3.8'
+
+services:
+  # Bot pour BTC-USDC
+  crypto-bot-btc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crypto-bot-btc
+    restart: unless-stopped  # Redémarre automatiquement sauf si explicitement arrêté
+    volumes:
+      # Persistance des données
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./state:/app/state
+      - ./reports:/app/reports
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["python", "-m", "bot", "-p", "BTC-USDC", "paper", "--strategy", "bull_rider_optimized_6h"]
+    networks:
+      - crypto-network
+
+  # Bot pour ETH-USDC
+  crypto-bot-eth:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crypto-bot-eth
+    restart: unless-stopped
+    volumes:
+      # Partage les mêmes volumes pour centraliser les données
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./state:/app/state
+      - ./reports:/app/reports
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["python", "-m", "bot", "-p", "ETH-USDC", "paper", "--strategy", "bull_rider_6h"]
+    networks:
+      - crypto-network
+
+# Réseau dédié pour une éventuelle communication entre conteneurs
+networks:
+  crypto-network:
+    driver: bridge

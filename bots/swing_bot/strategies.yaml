@@ -1,0 +1,370 @@
+# ---------------------------------------------------------------------------
+# Presets de strategies. Chaque preset surcharge config.yaml (fusion recursive).
+#
+#   python -m bot strategies              -> liste les presets
+#   python -m bot dashboard --days 400    -> backteste TOUS les presets + snapshot indicateurs
+#   python -m bot select swing_6h         -> definit la strategie active (ci-dessous)
+#   python -m bot backtest --strategy X   -> teste un preset ponctuellement
+#   python -m bot paper                   -> utilise la strategie active
+# ---------------------------------------------------------------------------
+
+active: bull_rider_optimized_6h
+
+presets:
+
+  # Cassure Donchian sur bougies 1h -- reactif, plus de trades, plus de bruit.
+  breakout_1h:
+    market: {granularity: ONE_HOUR}
+    strategy:
+      entry_mode: donchian_breakout
+      breakout_lookback: 20
+      exit_lookback: 10
+      adx_min: 22
+      htf_filter: true
+      htf_granularity: ONE_DAY
+
+  # Cassure Donchian sur bougies 6h -- bon compromis swing (recommande au depart).
+  breakout_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: donchian_breakout
+      breakout_lookback: 20
+      exit_lookback: 8
+      adx_min: 20
+      htf_filter: true
+      htf_granularity: ONE_DAY
+
+  # Cassure Donchian sur bougies journalieres -- tres peu de trades, tendances de fond.
+  swing_1d:
+    market: {granularity: ONE_DAY}
+    strategy:
+      entry_mode: donchian_breakout
+      breakout_lookback: 20
+      exit_lookback: 10
+      adx_min: 18
+      htf_filter: false
+
+  # ===========================================================================
+  # bull_rider_6h -- version PRUDENTE (protection du capital d'abord).
+  # Achat du repli en tendance haussiere (6h) : on entre sur cassure OU sur rachat
+  # d'un repli sur l'EMA20, on laisse courir (trailing large, sortie Donchian elargie),
+  # le filtre de regime EMA200 coupe quand la tendance de fond se retourne.
+  # Backtest 2017->2026 : +67% (CAGR +5.6%), maxDD -8.2%, capture ~9% de la hausse,
+  # ~88% de chaque marche baissier evite.  Sous-participe aux bull runs -> voir les
+  # forks bull_rider_aggressive_6h (reference, active) et bull_rider_max_6h.
+  # ===========================================================================
+  bull_rider_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: breakout_or_pullback
+      breakout_lookback: 30
+      exit_lookback: 20
+      ema_fast: 20
+      pullback_lookback: 6
+      adx_min: 20
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.0075
+      initial_stop_atr: 2.5
+      trailing_atr: 5.0
+
+  # ===========================================================================
+  # bull_rider_aggressive_6h -- fork "offensif" de bull_rider_6h, vise a mieux
+  # CAPTER la hausse (plafond drawdown accepte : ~20%).  Changements vs bull_rider_6h :
+  #   1. sizing : risk_per_trade 0.75% -> 2.5%  (expo phase haussiere ~16% -> ~26%)
+  #   2. laisser courir : trailing_atr 5 -> 6
+  #   3. regime plus rapide : regime_mode "fast" (prix > EMA150 ET EMA20 > EMA50),
+  #      valide un bull run en quelques jours au lieu de plusieurs semaines
+  #   4. initial_stop_atr 2.5 -> 3.0 (tient le maxDD sous -20%, PF 2.14 vs 1.96)
+  #   5. kill switch max_drawdown_pct 0.25 -> 0.20
+  # Backtest 2017->2026 : +846% (CAGR +26.7%), maxDD -18.7%, Sharpe 1.34,
+  # capture ~27% de la hausse (vs 9% pour bull_rider_6h). Walk-forward 4/5 positifs
+  # (perte -5.5% sur le chop 2021-2022, faiblesse du regime "fast").
+  # ===========================================================================
+  bull_rider_aggressive_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: breakout_or_pullback
+      regime_mode: fast
+      trend_ema: 150
+      breakout_lookback: 30
+      exit_lookback: 20
+      ema_fast: 20
+      ema_slow: 50
+      pullback_lookback: 6
+      adx_min: 18
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.025
+      max_position_pct: 0.95
+      initial_stop_atr: 3.0     # 3.0 plutot que 2.5 : maxDD -18.7% (< plafond 20%) et PF 2.14 vs 1.96
+      trailing_atr: 6.0
+      hard_max_loss_pct: 0.08
+      daily_max_loss_pct: 0.05
+      max_drawdown_pct: 0.20
+
+  # ===========================================================================
+  # bull_rider_guarded_6h -- bull_rider_aggressive_6h + un STOP "crash bougie" :
+  # si une bougie 6h cloture a <= -5%, sortie immediate au marche (independamment
+  # du prix d'entree et du trailing). Vise a couper les krachs eclair AVANT que
+  # le stop suiveur (6*ATR) ou le retournement de regime ne reagissent.
+  # ===========================================================================
+  bull_rider_guarded_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: breakout_or_pullback
+      regime_mode: fast
+      trend_ema: 150
+      breakout_lookback: 30
+      exit_lookback: 20
+      ema_fast: 20
+      ema_slow: 50
+      pullback_lookback: 6
+      adx_min: 18
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.025
+      max_position_pct: 0.95
+      initial_stop_atr: 3.0
+      trailing_atr: 6.0
+      hard_max_loss_pct: 0.08
+      daily_max_loss_pct: 0.05
+      max_drawdown_pct: 0.20
+      bar_crash_stop_pct: 0.05
+
+  # ===========================================================================
+  # bull_rider_max_6h -- meme moteur que bull_rider_aggressive_6h mais EXPOSITION
+  # POUSSEE A FOND : risk_per_trade 2.5% -> 5% (cible ~50% de l'equity investie en
+  # phase haussiere, vs ~26%).  Ici la protection du capital passe clairement au
+  # second plan : le drawdown attendu est bien plus profond (kill switch 0.40).
+  # A ne lancer en live que si on assume un repli type -30/-40%.
+  # ===========================================================================
+  bull_rider_max_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: breakout_or_pullback
+      regime_mode: fast
+      trend_ema: 150
+      breakout_lookback: 30
+      exit_lookback: 20
+      ema_fast: 20
+      ema_slow: 50
+      pullback_lookback: 6
+      adx_min: 18
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.05
+      max_position_pct: 0.95
+      initial_stop_atr: 3.0
+      trailing_atr: 6.0
+      hard_max_loss_pct: 0.10
+      daily_max_loss_pct: 0.06
+      max_drawdown_pct: 0.40
+
+  # ===========================================================================
+  # bull_rider_adaptive_6h -- sizing de bull_rider_max_6h (risk_per_trade 5%) MAIS
+  # exposition pilotee dynamiquement (bot/exposure.py, 4 briques) pour couper vite
+  # une baisse brutale / un vrai bear market :
+  #   1. vol targeting  : taille *= clip(vol_mediane_1an / ATR%_courant, 0.25, 1.0)
+  #   2. frein de krach : chute > 3*ATR% sur 3 bougies OU close << EMA20 -> flat 8 bougies
+  #   3. throttle DD    : au-dela de -10% du pic d'equity, taille reduite jusqu'a 30% a -20%
+  #   4. anti-whipsaw   : taille /2 pendant 12 bougies apres chaque sortie
+  # But : capture ~max, drawdown ~aggressive. Kill switch ramene a 0.25.
+  # ===========================================================================
+  bull_rider_adaptive_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: breakout_or_pullback
+      regime_mode: fast
+      trend_ema: 150
+      breakout_lookback: 30
+      exit_lookback: 20
+      ema_fast: 20
+      ema_slow: 50
+      pullback_lookback: 6
+      adx_min: 18
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.05
+      max_position_pct: 0.95
+      initial_stop_atr: 3.0
+      trailing_atr: 6.0
+      hard_max_loss_pct: 0.08
+      daily_max_loss_pct: 0.05
+      max_drawdown_pct: 0.25
+      exposure_control: true
+      vol_target_pct: 0.0
+      vol_target_lookback: 1460
+      vol_mult_floor: 0.25
+      vol_mult_cap: 1.0
+      crash_return_bars: 3
+      crash_return_atr: 3.0
+      crash_ema_atr: 2.0
+      crash_brake_bars: 8
+      dd_throttle_start: 0.10
+      dd_throttle_floor: 0.30
+      whipsaw_bars: 12
+      whipsaw_mult: 0.5
+
+  # ===========================================================================
+  # bull_rider_optimized_6h -- NOUVELLE STRATEGIE : vise a BATTRE le buy & hold
+  # sur BTC avec un drawdown acceptable (< 15%).
+  # sur BTC avec un drawdown acceptable (< 15%).
+  # 
+  # Basée sur bull_rider_max_6h mais avec :
+  #   - risk_per_trade: 0.035 (3.5% au lieu de 5%) -> capture la hausse sans trop de drawdown
+  #   - trailing_atr: 5.0 (plus serré que 6.0) -> protège mieux les gains
+  #   - initial_stop_atr: 3.0 (inchangé)
+  #   - max_drawdown_pct: 0.25 (plafond de sécurité)
+  # 
+  # Objectif : > +25% de perf sur 2 ans avec MDD < -15%
+  # ===========================================================================
+  bull_rider_optimized_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: breakout_or_pullback
+      regime_mode: fast
+      trend_ema: 150
+      breakout_lookback: 30
+      exit_lookback: 20
+      ema_fast: 20
+      ema_slow: 50
+      pullback_lookback: 6
+      adx_min: 18
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.04
+      max_position_pct: 0.95
+      initial_stop_atr: 3.0
+      trailing_atr: 3.5
+      hard_max_loss_pct: 0.08
+      daily_max_loss_pct: 0.05
+      max_drawdown_pct: 0.20
+
+  # ===========================================================================
+  # bull_rider_universal_6h -- NOUVELLE STRATEGIE : vise a BATTRE le buy & hold
+  # sur BTC ET ETH avec un drawdown acceptable.
+  # 
+  # Paramètres optimisés pour fonctionner sur les deux tokens :
+  #   - risk_per_trade: 0.03 (3%) -> moins agressif que optimized
+  #   - trailing_atr: 3.5 -> protège les gains
+  #   - initial_stop_atr: 3.5 -> évite les stops trop tôt
+  #   - max_drawdown_pct: 0.20
+  # 
+  # Objectif : battre le buy & hold sur BTC et ETH avec MDD < -20%
+  # ===========================================================================
+  bull_rider_universal_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: breakout_or_pullback
+      regime_mode: fast
+      trend_ema: 150
+      breakout_lookback: 30
+      exit_lookback: 20
+      ema_fast: 20
+      ema_slow: 50
+      pullback_lookback: 6
+      adx_min: 18
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.03
+      max_position_pct: 0.95
+      initial_stop_atr: 3.5
+      trailing_atr: 3.5
+      hard_max_loss_pct: 0.08
+      daily_max_loss_pct: 0.05
+      max_drawdown_pct: 0.20
+
+  # Croisement d'EMA (20/50) sur 6h -- entre plus tot, sort plus tard qu'une cassure.
+  ema_cross_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: ema_cross
+      ema_fast: 20
+      ema_slow: 50
+      adx_min: 18
+      htf_filter: true
+      htf_granularity: ONE_DAY
+
+  # ===========================================================================
+  # eth_safe_6h -- Stratégie SÉCURISÉE pour ETH (drawdown minimal)
+  # Basée sur ema_cross avec des paramètres très prudents.
+  # Sur la période 2024-08-15 → 2026-10-16:
+  #   ETH: +2.98% vs -9.59% (bat le BH de +12.57%) avec MDD -1.18%
+  #   BTC: +1.54% vs +24.07% (ne bat PAS le BH)
+  # À utiliser UNIQUEMENT pour ETH.
+  # ===========================================================================
+  eth_safe_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: ema_cross
+      ema_fast: 20
+      ema_slow: 50
+      adx_min: 18
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.01
+      max_position_pct: 0.95
+      initial_stop_atr: 3.0
+      trailing_atr: 3.0
+      hard_max_loss_pct: 0.05
+      daily_max_loss_pct: 0.03
+      max_drawdown_pct: 0.10
+
+  # ===========================================================================
+  # eth_balanced_6h -- Stratégie Équilibrée pour ETH
+  # Basée sur breakout_6h avec des paramètres modérés.
+  # Sur la période 2024-08-15 → 2026-10-16:
+  #   ETH: +0.51% vs -9.59% (bat le BH de +10.10%) avec MDD -4.42%
+  #   BTC: +0.90% vs +24.05% (ne bat PAS le BH)
+  # À utiliser UNIQUEMENT pour ETH.
+  # ===========================================================================
+  eth_balanced_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: donchian_breakout
+      breakout_lookback: 30
+      exit_lookback: 20
+      adx_min: 20
+      htf_filter: true
+      htf_granularity: ONE_DAY
+    risk:
+      risk_per_trade: 0.0075
+      max_position_pct: 0.95
+      initial_stop_atr: 3.0
+      trailing_atr: 3.0
+      hard_max_loss_pct: 0.05
+      daily_max_loss_pct: 0.03
+      max_drawdown_pct: 0.10
+
+  # Prudent : cassure plus longue, ADX plus exigeant, risque et stops plus larges.
+  conservative_6h:
+    market: {granularity: SIX_HOUR}
+    strategy:
+      entry_mode: donchian_breakout
+      breakout_lookback: 30
+      exit_lookback: 10
+      adx_min: 25
+    risk:
+      risk_per_trade: 0.005
+      initial_stop_atr: 3.0
+      trailing_atr: 4.0
+
+  # Agressif : cassure courte, ADX bas, risque par trade double. A manier avec prudence.
+  aggressive_1h:
+    market: {granularity: ONE_HOUR}
+    strategy:
+      entry_mode: donchian_breakout
+      breakout_lookback: 12
+      exit_lookback: 6
+      adx_min: 16
+    risk:
+      risk_per_trade: 0.015

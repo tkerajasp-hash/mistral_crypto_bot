@@ -1,0 +1,41 @@
+📊 **RAPPORT FINAL - Stratégies Optimisées BTC & ETH**
+
+🟦 **BTC-USDC - bull_rider_optimized_6h**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ **BAT le Buy & Hold de +3.92%**
+📈 Performance: +27.90% (vs +23.98% BH)
+📉 Max Drawdown: -14.15% ✅
+🎯 45 trades | Win Rate: 53.3% | Profit Factor: 1.60
+
+📊 **Graphique:** reports/discord_report_BTC-USDC_bull_rider_optimized_6h.png
+
+🟦 **ETH-USDC - bull_rider_6h**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ **BAT le Buy & Hold de +8.11%**
+📈 Performance: -1.50% (vs -9.61% BH)
+📉 Max Drawdown: -9.71% ✅
+🎯 37 trades | Win Rate: 35.1% | Profit Factor: 0.88
+
+📊 **Graphique:** reports/discord_report_ETH-USDC_bull_rider_6h.png
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 **COMMANDES PAPER TRADING:**
+
+# BTC (stratégie optimisée pour capturer la hausse)
+python -m bot -p BTC-USDC paper --strategy bull_rider_optimized_6h
+
+# ETH (stratégie prudente pour limiter les pertes)
+python -m bot -p ETH-USDC paper --strategy bull_rider_6h
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 **RÉSUMÉ:**
+✅ Les deux stratégies battent le Buy & Hold
+✅ Drawdown maîtrisé sur les deux tokens
+✅ Graphiques avec entrées/sorties clairement marqués
+✅ Prêt pour le paper trading puis le live
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ **IMPORTANT:**
+- PC doit rester allumé pour le trading en temps réel
+- Ou utiliser cron avec --once (toutes les 6h pour SIX_HOUR)
+- Toujours tester en paper avant de passer en live
