@@ -132,19 +132,22 @@ def main():
     """Génère les rapports et affiche le message Discord."""
     print("🔄 Génération des rapports...")
     
-    # Charger la configuration
-    config = load_config('config.yaml')
-    
     # Créer le générateur de rapports
     gen = ReportGenerator(output_dir="reports")
     
-    # Exécuter les backtests
+    # Exécuter les backtests avec les configs optimisées
     products = ['BTC-USDC', 'ETH-USDC']
     results = {}
     files = {}
     
     for product_id in products:
         print(f"  Backtest {product_id}...")
+        # Utiliser la config ultimate pour chaque token
+        if product_id == "ETH-USDC":
+            config = load_config('config_eth_ultimate.yaml')
+        else:
+            config = load_config('config_ultimate.yaml')
+        
         result = run_backtest(config, days=365, product_id=product_id)
         results[product_id] = result
         files[product_id] = gen.generate(result, config, product_id)
