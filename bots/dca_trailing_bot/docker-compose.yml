@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  dca-trailing-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dca-trailing-bot
+    restart: unless-stopped
+    volumes:
+      - ./config_ultimate.yaml:/app/config_ultimate.yaml:ro
+      - ./config_eth_ultimate.yaml:/app/config_eth_ultimate.yaml:ro
+      - ./state:/app/state
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    environment:
+      - COINBASE_API_KEY=${COINBASE_API_KEY}
+      - COINBASE_API_SECRET=${COINBASE_API_SECRET}
+    command: >
+      python3 __main__.py
+    networks:
+      - bot-network
+
+  # Optionnel: service pour générer les rapports
+  dca-report-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dca-report-generator
+    restart: on-failure
+    volumes:
+      - ./config_ultimate.yaml:/app/config_ultimate.yaml:ro
+      - ./config_eth_ultimate.yaml:/app/config_eth_ultimate.yaml:ro
+      - ./state:/app/state
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    environment:
+      - COINBASE_API_KEY=${COINBASE_API_KEY}
+      - COINBASE_API_SECRET=${COINBASE_API_SECRET}
+    command: >
+      python3 generate_discord_report.py
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge
