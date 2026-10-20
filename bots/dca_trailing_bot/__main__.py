@@ -78,6 +78,10 @@ def load_config_file(config_path: str = "config.yaml") -> dict:
 def create_strategy(config: dict) -> DCATrailingStrategy:
     """Crée la stratégie depuis la configuration."""
     strat_config = config.get("strategy", {})
+    
+    # Paramètres DCA agressif (avec valeurs par défaut)
+    aggressive_dca = strat_config.get("aggressive_dca", {})
+    
     return DCATrailingStrategy(
         dca_levels=strat_config.get("dca_levels", 3),
         dca_percentage=strat_config.get("dca_percentage", 0.33),
@@ -92,6 +96,26 @@ def create_strategy(config: dict) -> DCATrailingStrategy:
         adx_period=strat_config.get("adx_period", 14),
         adx_min=strat_config.get("adx_min", 20.0),
         use_trend_filter=strat_config.get("use_trend_filter", True),
+        # NOUVELLES OPTIONS
+        use_available_funds=strat_config.get("use_available_funds", False),
+        dca_available_funds_percentage=strat_config.get("dca_available_funds_percentage", 0.50),
+        use_dca_confirmation=strat_config.get("use_dca_confirmation", False),
+        dca_confirmation_mode=strat_config.get("dca_confirmation_mode", "rsi_ema"),
+        use_enhanced_trend_filter=strat_config.get("use_enhanced_trend_filter", False),
+        trend_ema_fast=strat_config.get("trend_ema_fast", 50),
+        rsi_period=strat_config.get("rsi_period", 14),
+        rsi_oversold=strat_config.get("rsi_oversold", 30.0),
+        confirm_ema_fast=strat_config.get("confirm_ema_fast", 20),
+        # === DCA AGRESSIF ===
+        aggressive_dca_enabled=aggressive_dca.get("enabled", True),
+        aggressive_dca_target_exposure=aggressive_dca.get("target_exposure", 1.0),
+        aggressive_dca_investment_steps=aggressive_dca.get("investment_steps", 2),
+        aggressive_dca_step_percentage=aggressive_dca.get("step_percentage", 0.50),
+        aggressive_dca_step_delay_bars=aggressive_dca.get("step_delay_bars", 6),
+        aggressive_dca_require_pullback=aggressive_dca.get("require_pullback", True),
+        aggressive_dca_pullback_levels=aggressive_dca.get("pullback_levels", [-3.0, -5.0]),
+        aggressive_dca_max_price_increase_pct=aggressive_dca.get("max_price_increase_pct", 8.0),
+        aggressive_dca_consecutive_bars=aggressive_dca.get("consecutive_bars", 5),
     )
 
 

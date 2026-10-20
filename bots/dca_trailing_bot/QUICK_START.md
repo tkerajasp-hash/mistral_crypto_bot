@@ -87,7 +87,7 @@ strategy:
 # Discord (déjà configuré)
 discord:
   enabled: true
-  webhook_url: "https://discord.com/api/webhooks/1560044752773058620/y_PXLqpSoX1GPU9N4fw3G1WjE0slEOgTHs8fBAvGaroDZ6V6jhmQ4CSs1_DMc6JLpdl2"
+  webhook_url: "https://discord.com/api/webhooks/1562138425484775436/NewDRS61a1VzY9C9F7TeWBUqLchYNnb96jCi1978STRnQvlfkaouQhZrAaihHAh_aZwU"
   send_trades: true
   send_backtest_results: true
 

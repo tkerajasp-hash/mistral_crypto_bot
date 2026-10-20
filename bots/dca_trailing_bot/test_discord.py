@@ -16,7 +16,7 @@ from datetime import datetime
 
 def test_simple_message():
     """Test avec un message simple."""
-    webhook_url = "https://discord.com/api/webhooks/1560044752773058620/y_PXLqpSoX1GPU9N4fw3G1WjE0slEOgTHs8fBAvGaroDZ6V6jhmQ4CSs1_DMc6JLpdl2"
+    webhook_url = "https://discord.com/api/webhooks/1562138425484775436/NewDRS61a1VzY9C9F7TeWBUqLchYNnb96jCi1978STRnQvlfkaouQhZrAaihHAh_aZwU"
     
     payload = {
         "content": "🎯 **TEST DISCORD - DCA BOT** \nConnexion réussie ! ✅",
@@ -46,7 +46,7 @@ def test_simple_message():
 
 def test_with_image():
     """Test avec une image (simule un rapport)."""
-    webhook_url = "https://discord.com/api/webhooks/1560044752773058620/y_PXLqpSoX1GPU9N4fw3G1WjE0slEOgTHs8fBAvGaroDZ6V6jhmQ4CSs1_DMc6JLpdl2"
+    webhook_url = "https://discord.com/api/webhooks/1562138425484775436/NewDRS61a1VzY9C9F7TeWBUqLchYNnb96jCi1978STRnQvlfkaouQhZrAaihHAh_aZwU"
     
     # Créer une image de test
     import matplotlib

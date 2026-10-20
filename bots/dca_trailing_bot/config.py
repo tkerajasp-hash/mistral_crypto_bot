@@ -220,6 +220,20 @@ def load_config(config_path: str = "config.yaml") -> BotConfig:
             config.strategy.adx_period = strat["adx_period"]
         if "adx_min" in strat:
             config.strategy.adx_min = strat["adx_min"]
+        
+        # === DCA AGRESSIF ===
+        if "aggressive_dca" in strat:
+            aggr_dca = strat["aggressive_dca"]
+            if isinstance(aggr_dca, dict):
+                config.strategy.aggressive_dca_enabled = aggr_dca.get("enabled", True)
+                config.strategy.aggressive_dca_target_exposure = aggr_dca.get("target_exposure", 1.0)
+                config.strategy.aggressive_dca_investment_steps = aggr_dca.get("investment_steps", 2)
+                config.strategy.aggressive_dca_step_percentage = aggr_dca.get("step_percentage", 0.50)
+                config.strategy.aggressive_dca_step_delay_bars = aggr_dca.get("step_delay_bars", 6)
+                config.strategy.aggressive_dca_require_pullback = aggr_dca.get("require_pullback", True)
+                config.strategy.aggressive_dca_pullback_levels = aggr_dca.get("pullback_levels", [-3.0, -5.0])
+                config.strategy.aggressive_dca_max_price_increase_pct = aggr_dca.get("max_price_increase_pct", 8.0)
+                config.strategy.aggressive_dca_consecutive_bars = aggr_dca.get("consecutive_bars", 5)
     
     # Risk
     if "risk" in raw_config:

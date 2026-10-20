@@ -1,0 +1,115 @@
+# ---------------------------------------------------------------------------
+# DCA Trailing Bot - Configuration ULTIME V2 (OPTIMISÉE)
+# Objectif: Battre le Buy & Hold avec un drawdown MINIMAL
+# 
+# AMÉLIORATIONS vs V1:
+# 1. DCA plus conservateur (2 niveaux à 25% au lieu de 3 à 33%)
+# 2. Pullbacks plus larges (-8%, -15% au lieu de -3%, -6%, -15%)
+# 3. Stops plus larges (trailing 15%, initial 20%)
+# 4. Take Profit ajouté (R:3)
+# 5. Filtre ADX plus strict (25 au lieu de 20)
+# 6. Double filtre de tendance (EMA200 + EMA50)
+# 7. DCA Agressif en phase haussière (NOUVEAU)
+# 8. Cooldown réduit (6 bougies au lieu de 12)
+# ---------------------------------------------------------------------------
+
+# Mode d'exécution
+mode: paper
+
+# Configuration marché
+market:
+  product_id: BTC-USDC
+  granularity: SIX_HOUR
+  warmup_bars: 100
+
+# Stratégie DCA + Trailing Stop - VERSION ULTIME V2
+strategy:
+  # Mode d'entrée
+  entry_mode: dca_on_pullback
+  
+  # --- Configuration DCA OPTIMISÉE ---
+  dca_levels: 2              # 2 niveaux au lieu de 3 (moins de dilution)
+  dca_percentage: 0.25       # 25% du capital INITIAL par niveau (50% total au lieu de 99%)
+  dca_delay_bars: 12          # 12 bougies (72 heures) entre niveaux (attente plus longue)
+  
+  # Niveaux de pullback PLUS LARGES pour éviter les faux signaux
+  dca_use_atr_levels: false
+  dca_pullback_levels: [-8.0, -15.0]  # Pullbacks à -8%, -15% (au lieu de -3%, -6%, -15%)
+  
+  # --- Filtre de tendance RENFORCÉ ---
+  use_trend_filter: true
+  use_enhanced_trend_filter: true  # NOUVEAU: Double filtre (EMA200 + EMA50)
+  trend_ema: 200              # EMA200 pour filtre de tendance long terme
+  trend_ema_fast: 50          # NOUVEAU: EMA50 pour confirmation courte
+  trend_slope_lookback: 20
+  
+  # ADX plus strict pour éviter les marchés en range
+  adx_period: 14
+  adx_min: 25                # Seuil plus élevé (25 au lieu de 20)
+  
+  # --- Entrée initiale ---
+  initial_entry_condition: pullback  # Entrée sur pullback vers EMA200
+  breakout_lookback: 20
+  
+  # --- DCA AGRESSIF EN PHASE HAUSSIÈRE (votre idée) ---
+  aggressive_dca:
+    enabled: true
+    trigger: uptrend_confirmed
+    target_exposure: 1.0      # Objectif: 100% d'exposition
+    investment_steps: 2       # 2 étapes pour atteindre 100%
+    step_percentage: 0.50    # 50% du cash DISPONIBLE par étape
+    step_delay_bars: 6       # 6 bougies (36 heures) entre étapes
+    require_pullback: true   # Attendre un pullback avant d'investir
+    pullback_levels: [-3.0, -5.0]  # Pullbacks acceptables: -3%, -5%
+    max_price_increase_pct: 8.0  # Ne pas investir si +8% depuis dernière entrée
+    consecutive_bars: 5      # 5 bougies consécutives en hausse pour confirmer
+  
+  # --- Stops AMÉLIORÉS ---
+  trailing_stop_percentage: 15.0  # 15% (au lieu de 10% - plus large)
+  initial_stop_percentage: 20.0   # 20% (au lieu de 10% - protection plus forte)
+  
+  # Take Profit - ACTIVÉ pour verrouiller les gains
+  take_profit_r_multiple: 3.0     # Take profit à 3x le risque
+  take_profit_percentage: null    # Désactivé (utilise R-multiple)
+
+# Gestion du risque
+risk:
+  risk_per_trade: 0.02            # 2% du capital par trade (au lieu de 1%)
+  max_position_pct: 0.60          # 60% max par position (au lieu de 50%)
+  hard_max_loss_pct: 0.05         # 5% max loss par trade (au lieu de 10%)
+  daily_max_loss_pct: 0.03       # 3% max loss journalière (au lieu de 5%)
+  max_drawdown_pct: 0.15          # 15% max drawdown global (au lieu de 25%)
+
+# Exécution
+execution:
+  prefer_maker: true
+  limit_offset_bps: 2.0           # Moins de slippage (au lieu de 5.0)
+  order_timeout_sec: 45
+  stop_exit_is_market: true
+  cooldown_bars: 6                # 6 bougies (au lieu de 12 - réentre plus vite)
+  poll_offset_sec: 20
+  slippage_bps: 1.0              # Estimation plus réaliste
+
+# Paper trading
+paper:
+  starting_cash: 10000.0        # Capital en USDC
+
+# Notifications
+notifications:
+  enabled: false
+  on_trades: true
+  on_incidents: true
+
+# Discord
+discord:
+  enabled: true
+  webhook_url: "https://discord.com/api/webhooks/1562138425484775436/NewDRS61a1VzY9C9F7TeWBUqLchYNnb96jCi1978STRnQvlfkaouQhZrAaihHAh_aZwU"
+  send_trades: true
+  send_backtest_results: true
+
+# Logging
+logging:
+  level: INFO
+  state_file: state/bot_state.json
+  trades_csv: logs/trades.csv
+  equity_csv: logs/equity.csv

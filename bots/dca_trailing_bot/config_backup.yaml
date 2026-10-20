@@ -78,14 +78,9 @@ notifications:
   on_incidents: true
 
 # Discord - CONFIGURÉ POUR VOTRE WEBHOOK
-notifications:
-  enabled: false
-  on_trades: true
-  on_incidents: true
-
 discord:
   enabled: true                    # ✅ Discord activé
-  webhook_url: "https://discord.com/api/webhooks/1560044752773058620/y_PXLqpSoX1GPU9N4fw3G1WjE0slEOgTHs8fBAvGaroDZ6V6jhmQ4CSs1_DMc6JLpdl2"
+  webhook_url: "https://discord.com/api/webhooks/1562138425484775436/NewDRS61a1VzY9C9F7TeWBUqLchYNnb96jCi1978STRnQvlfkaouQhZrAaihHAh_aZwU"
   send_trades: true                 # ✅ Envoyer chaque trade
   send_daily_report: false          # ❌ Pas encore implémenté
   send_backtest_results: true       # ✅ Envoyer résultats backtest

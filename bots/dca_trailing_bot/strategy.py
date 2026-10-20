@@ -61,6 +61,13 @@ class DCAState:
     initial_cash: float = 10000.0  # Capital initial
     available_funds: float = 10000.0  # Fonds disponibles pour DCA
     
+    # === NOUVEAUX CHAMPS POUR DCA AGRESSIF ===
+    total_invested: float = 0.0  # Montant total investi
+    current_exposure: float = 0.0  # Exposition actuelle (0-1)
+    aggressive_dca_active: bool = False  # DCA agressif en cours
+    aggressive_dca_step: int = 0  # Étape actuelle du DCA agressif
+    last_aggressive_dca_bar: int = 0  # Dernière bougie DCA agressif
+    
     def reset(self) -> None:
         """Réinitialise l'état DCA."""
         self.active = False
@@ -70,8 +77,24 @@ class DCAState:
         self.last_dca_bar = 0
         self.highest_high = 0.0
         self.available_funds = self.initial_cash
+        self.total_invested = 0.0
+        self.current_exposure = 0.0
+        self.aggressive_dca_active = False
+        self.aggressive_dca_step = 0
+        self.last_aggressive_dca_bar = 0
     
-    def on_enter(self, entry_price: float, initial_stop_pct: float = 15.0, is_dca: bool = False, dca_level: Optional[int] = None) -> None:
+    def update_exposure(self, amount: float, price: float) -> None:
+        """Met à jour l'exposition et les fonds investis."""
+        self.total_invested += amount
+        self.available_funds -= amount
+        if self.initial_cash > 0:
+            self.current_exposure = self.total_invested / self.initial_cash
+    
+    def get_remaining_exposure(self, target: float = 1.0) -> float:
+        """Calcule l'exposition restante jusqu'à la cible."""
+        return max(0.0, target - self.current_exposure)
+    
+    def on_enter(self, entry_price: float, initial_stop_pct: float = 15.0, is_dca: bool = False, dca_level: Optional[int] = None, amount: float = 0.0) -> None:
         """Appelé quand on entre en position."""
         if not self.active:
             self.active = True
@@ -79,9 +102,15 @@ class DCAState:
             self.initial_stop = entry_price * (1 - initial_stop_pct / 100)
             self.current_dca_level = 1
             self.highest_high = entry_price
+            # Initialiser l'exposition avec la première entrée
+            if amount > 0:
+                self.update_exposure(amount, entry_price)
         else:
             # Entrée DCA
             self.current_dca_level = dca_level or self.current_dca_level + 1
+            # Mettre à jour l'exposition
+            if amount > 0:
+                self.update_exposure(amount, entry_price)
 
 
 class DCATrailingStrategy:
@@ -116,6 +145,16 @@ class DCATrailingStrategy:
         rsi_period: int = 14,
         rsi_oversold: float = 30.0,
         confirm_ema_fast: int = 20,
+        # === DCA AGRESSIF EN PHASE HAUSSIÈRE (NOUVEAU) ===
+        aggressive_dca_enabled: bool = True,
+        aggressive_dca_target_exposure: float = 1.0,
+        aggressive_dca_investment_steps: int = 2,
+        aggressive_dca_step_percentage: float = 0.50,
+        aggressive_dca_step_delay_bars: int = 6,
+        aggressive_dca_require_pullback: bool = True,
+        aggressive_dca_pullback_levels: list[float] = [-3.0, -5.0],
+        aggressive_dca_max_price_increase_pct: float = 8.0,
+        aggressive_dca_consecutive_bars: int = 5,
     ):
         self.entry_mode = entry_mode
         self.initial_entry_condition = initial_entry_condition
@@ -146,12 +185,29 @@ class DCATrailingStrategy:
         self.rsi_oversold = rsi_oversold
         self.confirm_ema_fast = confirm_ema_fast
         
+        # === DCA AGRESSIF EN PHASE HAUSSIÈRE ===
+        self.aggressive_dca_enabled = aggressive_dca_enabled
+        self.aggressive_dca_target_exposure = aggressive_dca_target_exposure
+        self.aggressive_dca_investment_steps = aggressive_dca_investment_steps
+        self.aggressive_dca_step_percentage = aggressive_dca_step_percentage
+        self.aggressive_dca_step_delay_bars = aggressive_dca_step_delay_bars
+        self.aggressive_dca_require_pullback = aggressive_dca_require_pullback
+        self.aggressive_dca_pullback_levels = aggressive_dca_pullback_levels
+        self.aggressive_dca_max_price_increase_pct = aggressive_dca_max_price_increase_pct
+        self.aggressive_dca_consecutive_bars = aggressive_dca_consecutive_bars
+        
         # Validation
         assert dca_levels == len(dca_pullback_levels), "dca_levels must match dca_pullback_levels"
         assert all(p < 0 for p in dca_pullback_levels), "Pullback levels must be negative"
         if not dca_use_atr_levels:
             assert sum([dca_percentage] * dca_levels) <= 1.0, "Total DCA allocation exceeds 100%"
         assert dca_confirmation_mode in ["rsi_ema", "ema_cross", "slope_positive"], "Invalid dca_confirmation_mode"
+        
+        # Validation DCA agressif
+        if self.aggressive_dca_enabled:
+            assert 0 < self.aggressive_dca_target_exposure <= 1.0, "Target exposure must be between 0 and 1"
+            assert self.aggressive_dca_investment_steps > 0, "Investment steps must be > 0"
+            assert 0 < self.aggressive_dca_step_percentage <= 1.0, "Step percentage must be between 0 and 1"
 
     # ------------------------------------------------------------------
     def min_bars(self) -> int:
@@ -228,6 +284,55 @@ class DCATrailingStrategy:
         if pd.isna(adx_v):
             return False
         return float(adx_v) >= self.adx_min
+
+    # ------------------------------------------------------------------
+    def _check_uptrend_confirmed(self, data: pd.DataFrame) -> bool:
+        """Vérifie si nous sommes en phase haussière avérée.
+        
+        Conditions pour une phase haussière confirmée:
+        1. Prix > EMA200
+        2. Pente EMA200 > 0 (tendance haussière)
+        3. ADX > adx_min (tendance forte, pas un range)
+        4. N bougies consécutives en hausse
+        """
+        if not self.aggressive_dca_enabled:
+            return False
+        
+        if len(data) < max(self.trend_ema, self.trend_slope_lookback, self.adx_period, 2):
+            return False
+        
+        row = data.iloc[-1]
+        
+        # 1. Prix > EMA200
+        ema200 = data["ema_trend"].iloc[-1]
+        price = float(row["close"])
+        if pd.isna(ema200) or price <= ema200:
+            return False
+        
+        # 2. Pente EMA200 > 0
+        slope = data["ema_trend_slope"].iloc[-1]
+        if pd.isna(slope) or slope <= 0:
+            return False
+        
+        # 3. ADX > adx_min
+        adx_val = float(row.get("adx", 0))
+        if pd.isna(adx_val) or adx_val < self.adx_min:
+            return False
+        
+        # 4. N bougies consécutives en hausse
+        consecutive_up = 0
+        for i in range(-1, -min(20, len(data)), -1):
+            if i == -1:
+                continue
+            if float(data["close"].iloc[i]) > float(data["close"].iloc[i-1]):
+                consecutive_up += 1
+            else:
+                break
+        
+        if consecutive_up < self.aggressive_dca_consecutive_bars:
+            return False
+        
+        return True
 
     # ------------------------------------------------------------------
     def _rsi(self, close: pd.Series, period: int = 14) -> float:
@@ -384,7 +489,113 @@ class DCATrailingStrategy:
                 row, price, atr_v, dca_state, regime_ok, data
             )
         
+        # === DCA AGRESSIF EN PHASE HAUSSIÈRE (NOUVEAU) ===
+        # Vérifier si on peut déclencher un DCA agressif
+        if (self.aggressive_dca_enabled and 
+            dca_state.active and 
+            dca_state.current_dca_level >= self.dca_levels):
+            
+            aggressive_signal = self._evaluate_aggressive_dca(
+                row, price, atr_v, dca_state, current_bar, regime_ok, data
+            )
+            if aggressive_signal.action != HOLD:
+                return aggressive_signal
+        
         return Signal(HOLD, price, "Pas de signal", adx=adx_v, atr=atr_v)
+
+    # ------------------------------------------------------------------
+    def _evaluate_aggressive_dca(
+        self,
+        row: pd.Series,
+        price: float,
+        atr_v: float,
+        dca_state: DCAState,
+        current_bar: int,
+        regime_ok: bool,
+        data: pd.DataFrame,
+    ) -> Signal:
+        """Évalue et déclenche le DCA agressif en phase haussière.
+        
+        Logique:
+        1. Vérifier qu'on est en phase haussière avérée
+        2. Vérifier qu'on a pas déjà atteint l'exposition cible
+        3. Vérifier qu'on a attendu le délai depuis la dernière entrée
+        4. Vérifier qu'on est en pullback (si requis)
+        5. Investir une partie du cash restant
+        
+        Returns:
+            Signal DCA_ENTER si conditions remplies, HOLD sinon
+        """
+        # 1. Vérifier phase haussière avérée
+        if not self._check_uptrend_confirmed(data):
+            return Signal(HOLD, price, "Attente phase haussière pour DCA agressif", adx=0, atr=atr_v)
+        
+        # 2. Vérifier exposition actuelle
+        remaining_exposure = dca_state.get_remaining_exposure(self.aggressive_dca_target_exposure)
+        if remaining_exposure <= 0.01:  # 1% de marge
+            return Signal(HOLD, price, f"Exposition cible atteinte ({dca_state.current_exposure:.0%})", adx=0, atr=atr_v)
+        
+        # 3. Vérifier délai depuis dernière entrée DCA (agressive ou classique)
+        last_dca_bar = max(dca_state.last_dca_bar, dca_state.last_aggressive_dca_bar)
+        if current_bar - last_dca_bar < self.aggressive_dca_step_delay_bars:
+            return Signal(
+                HOLD, price,
+                f"Attente délai DCA agressif ({current_bar - last_dca_bar}/{self.aggressive_dca_step_delay_bars} bars)",
+                adx=0, atr=atr_v
+            )
+        
+        # 4. Vérifier pullback si requis
+        if self.aggressive_dca_require_pullback:
+            pullback_from_high_pct = (price / dca_state.highest_high - 1) * 100
+            
+            # Vérifier si on est dans un pullback acceptable
+            pullback_ok = any(
+                pullback_from_high_pct <= level
+                for level in self.aggressive_dca_pullback_levels
+            )
+            
+            if not pullback_ok:
+                return Signal(
+                    HOLD, price,
+                    f"Attente pullback pour DCA agressif (actuel: {pullback_from_high_pct:.1f}%)",
+                    adx=0, atr=atr_v
+                )
+            
+            # Vérifier que le prix n'a pas trop monté depuis la dernière entrée
+            if dca_state.highest_high > 0:
+                price_increase_pct = (price / dca_state.highest_high - 1) * 100
+                if price_increase_pct > self.aggressive_dca_max_price_increase_pct:
+                    return Signal(
+                        HOLD, price,
+                        f"Prix trop élevé pour DCA agressif (+{price_increase_pct:.1f}% > {self.aggressive_dca_max_price_increase_pct}%)",
+                        adx=0, atr=atr_v
+                    )
+        
+        # 5. Calculer le montant à investir
+        # Investir un pourcentage des fonds DISPONIBLES
+        step_amount = dca_state.available_funds * self.aggressive_dca_step_percentage
+        
+        # Ne pas investir plus que nécessaire pour atteindre la cible
+        amount_needed = remaining_exposure * dca_state.initial_cash
+        step_amount = min(step_amount, amount_needed)
+        
+        if step_amount <= 10:  # Montant minimal
+            return Signal(HOLD, price, "Montant DCA agressif trop faible", adx=0, atr=atr_v)
+        
+        # Incrémenter l'étape
+        dca_state.aggressive_dca_step += 1
+        dca_state.last_aggressive_dca_bar = current_bar
+        
+        # Retourner le signal DCA agressif
+        return Signal(
+            DCA_ENTER, price,
+            f"⚡ DCA AGRESSIF Étape {dca_state.aggressive_dca_step} : "
+            f"Investissement ${step_amount:.2f} | "
+            f"Exposition: {dca_state.current_exposure:.0%} → {(dca_state.current_exposure + step_amount/dca_state.initial_cash):.0%} | "
+            f"Phase haussière confirmée",
+            dca_level=dca_state.aggressive_dca_step,
+            adx=0, atr=atr_v
+        )
 
     # ------------------------------------------------------------------
     def _evaluate_entry(

@@ -333,10 +333,11 @@ class DCABacktester:
                     
                     cash -= cost
                     
-                    # NOUVEAU: Mettre à jour les fonds disponibles
-                    dca_state.available_funds -= (qty * close)
-                    
+                    # NOUVEAU: Mettre à jour les fonds et l'exposition
+                    entry_amount = qty * close
+                    dca_state.available_funds -= entry_amount
                     dca_state.on_enter(close, self.config.strategy.initial_stop_percentage, is_dca=False)
+                    dca_state.update_exposure(entry_amount, close)
                     
                     # Enregistrer l'entrée initiale
                     self._record_dca_entry(trades, timestamp, close, qty, fee, 0, False)
@@ -373,15 +374,71 @@ class DCABacktester:
                     total_fees += dca_fee
                     
                     # NOUVEAU: Mettre à jour les fonds disponibles dans dca_state
-                    dca_state.available_funds -= (dca_qty * close)
+                    dca_amount = dca_qty * close
+                    dca_state.available_funds -= dca_amount
                     
                     dca_state.on_enter(close, self.config.strategy.initial_stop_percentage, is_dca=True, dca_level=position.dca_level)
+                    dca_state.update_exposure(dca_amount, close)
                     dca_state.last_dca_bar = i
                     
                     # Enregistrer l'entrée DCA
                     self._record_dca_entry(
                         trades, timestamp, close, dca_qty, dca_fee,
                         position.dca_level, True
+                    )
+                
+                # === DCA AGRESSIF EN PHASE HAUSSIÈRE (NOUVEAU) ===
+                elif signal.action == DCA_ENTER and dca_state.current_dca_level >= self.config.strategy.dca_levels:
+                    # C'est un DCA agressif - gérer séparément
+                    if not hasattr(self.config.strategy, 'aggressive_dca_enabled') or not self.config.strategy.aggressive_dca_enabled:
+                        continue
+                    
+                    # Vérifier délai depuis dernière entrée (agressive ou classique)
+                    last_dca_bar = max(dca_state.last_dca_bar, getattr(dca_state, 'last_aggressive_dca_bar', 0))
+                    if i - last_dca_bar < getattr(self.config.strategy, 'aggressive_dca_step_delay_bars', 6):
+                        continue
+                    
+                    # Calculer le montant à investir
+                    step_percentage = getattr(self.config.strategy, 'aggressive_dca_step_percentage', 0.50)
+                    step_amount = dca_state.available_funds * step_percentage
+                    
+                    # Ne pas investir plus que nécessaire pour atteindre la cible
+                    target_exposure = getattr(self.config.strategy, 'aggressive_dca_target_exposure', 1.0)
+                    remaining_exposure = target_exposure - (dca_state.total_invested / dca_state.initial_cash)
+                    amount_needed = remaining_exposure * dca_state.initial_cash
+                    step_amount = min(step_amount, amount_needed)
+                    
+                    if step_amount <= 10:  # Montant minimal
+                        continue
+                    
+                    dca_qty = step_amount / close
+                    if dca_qty <= 0:
+                        continue
+                    
+                    dca_fee = dca_qty * close * self.fees_bps / 10000
+                    dca_cost = dca_qty * close + dca_fee
+                    
+                    if dca_cost > cash:
+                        continue
+                    
+                    # Ajouter à la position
+                    old_quantity = position.quantity
+                    position.add_dca(close, dca_qty, dca_fee)
+                    cash -= dca_cost
+                    total_fees += dca_fee
+                    
+                    # Mettre à jour les fonds et l'exposition
+                    dca_aggressive_amount = dca_qty * close
+                    dca_state.available_funds -= dca_aggressive_amount
+                    dca_state.update_exposure(dca_aggressive_amount, close)
+                    dca_state.last_aggressive_dca_bar = i
+                    dca_state.aggressive_dca_step += 1
+                    dca_state.aggressive_dca_active = True
+                    
+                    # Enregistrer l'entrée DCA agressive
+                    self._record_dca_entry(
+                        trades, timestamp, close, dca_qty, dca_fee,
+                        position.dca_level, True, is_aggressive=True
                     )
         
         # Sortie forcée à la fin si position ouverte
@@ -565,10 +622,14 @@ class DCABacktester:
         fee: float,
         dca_level: int,
         is_dca: bool,
+        is_aggressive: bool = False,
     ) -> None:
         """Enregistre une entrée DCA (pour tracking)."""
         # On ne crée pas de trade, mais on enregistre l'information
         # pour le rapport final
+        if is_aggressive:
+            # Optionnel: ajouter un log pour DCA agressif
+            log.debug(f"DCA AGRESSIF: {qty} @ ${price:.2f} (niveau {dca_level})")
         pass
     
     # ------------------------------------------------------------------
